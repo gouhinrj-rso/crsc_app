@@ -27,17 +27,21 @@ A HIPAA-compliant web application that assists military veterans in filing for C
 crsc_app/
 ├── src/
 │   ├── components/     # Reusable UI components
-│   ├── contexts/       # React contexts (Auth)
+│   ├── contexts/       # React contexts (Auth, DevMode)
 │   ├── hooks/          # Custom React hooks
 │   ├── lib/            # Utilities, API client, constants
 │   ├── pages/          # Page components
 │   └── types/          # TypeScript type definitions
 ├── supabase/
 │   ├── functions/      # Edge functions
-│   │   ├── chat-handler/    # AI chat with Claude
-│   │   ├── db-proxy/        # Database operations proxy
-│   │   ├── generate-pdf/    # PDF document generation
-│   │   └── payment-handler/ # Stripe payment processing
+│   │   ├── chat-handler/      # AI chat with Claude (streaming)
+│   │   ├── db-proxy/          # Database operations proxy (Google Cloud PostgreSQL)
+│   │   ├── extract-document/  # Document data extraction via Claude Vision
+│   │   ├── generate-pdf/      # PDF document generation (DD Form 2860)
+│   │   ├── idme-auth/         # ID.me OAuth authorization URL generation
+│   │   ├── idme-callback/     # ID.me OAuth callback & veteran verification
+│   │   ├── payment-handler/   # Stripe payment processing
+│   │   └── upload-document/   # Document upload to Google Cloud Storage
 │   └── migrations/     # Database migrations
 └── public/             # Static assets
 ```
@@ -84,6 +88,16 @@ crsc_app/
    supabase secrets set DB_USER=your-db-user
    supabase secrets set DB_PASSWORD=your-db-password
    supabase secrets set ANTHROPIC_API_KEY=your-anthropic-key
+   supabase secrets set STRIPE_SECRET_KEY=your-stripe-secret-key
+   supabase secrets set GCS_BUCKET_NAME=crsc-documents
+   supabase secrets set GCS_PROJECT_ID=your-gcp-project-id
+   supabase secrets set GCS_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+   supabase secrets set GCS_PRIVATE_KEY=your-gcs-private-key
+   supabase secrets set IDME_CLIENT_ID=your-idme-client-id
+   supabase secrets set IDME_CLIENT_SECRET=your-idme-client-secret
+   supabase secrets set IDME_REDIRECT_URI=https://your-project.supabase.co/functions/v1/idme-callback
+   supabase secrets set FRONTEND_URL=https://your-frontend-domain.com
+   supabase secrets set ENCRYPTION_KEY=your-32-byte-encryption-key
    ```
 
 5. Start the development server:
@@ -97,8 +111,12 @@ crsc_app/
 supabase link --project-ref your-project-ref
 supabase functions deploy chat-handler
 supabase functions deploy db-proxy
+supabase functions deploy extract-document
 supabase functions deploy generate-pdf
+supabase functions deploy idme-auth
+supabase functions deploy idme-callback
 supabase functions deploy payment-handler
+supabase functions deploy upload-document
 ```
 
 ## Application Flow
