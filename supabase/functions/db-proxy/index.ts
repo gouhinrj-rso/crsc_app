@@ -79,13 +79,23 @@ serve(async (req: Request) => {
       }
     }
 
+    // Encryption key for SSN (from environment)
+    const ssnEncryptionKey = Deno.env.get('SSN_ENCRYPTION_KEY') || Deno.env.get('DB_PASSWORD')!
+
     let result: unknown = null
 
     switch (operation) {
       // ==================== SELECT Operations ====================
       case 'get_personal_info': {
         const res = await db.queryObject`
-          SELECT * FROM personal_information WHERE user_id = ${userId}
+          SELECT id, user_id, first_name, middle_initial, last_name,
+            CASE WHEN ssn_encrypted IS NOT NULL AND ssn_encrypted != ''
+              THEN decrypt_ssn(ssn_encrypted, ${ssnEncryptionKey})
+              ELSE ssn_encrypted
+            END AS ssn_encrypted,
+            date_of_birth, email, phone, address_line1, address_line2,
+            city, state, zip_code, created_at, updated_at
+          FROM personal_information WHERE user_id = ${userId}
         `
         result = res.rows[0] || null
         await logAudit('read', 'personal_information')
@@ -173,9 +183,13 @@ serve(async (req: Request) => {
       // ==================== UPSERT Operations ====================
       case 'upsert_personal_info': {
         const d = data!
+        // Encrypt SSN before storing
+        const encryptedSsn = d.ssn_encrypted
+          ? (await db.queryObject<{encrypted: string}>`SELECT encrypt_ssn(${d.ssn_encrypted as string}, ${ssnEncryptionKey}) as encrypted`).rows[0]?.encrypted
+          : null
         await db.queryObject`
           INSERT INTO personal_information (user_id, first_name, middle_initial, last_name, ssn_encrypted, date_of_birth, email, phone, address_line1, address_line2, city, state, zip_code, updated_at)
-          VALUES (${userId}, ${d.first_name || null}, ${d.middle_initial || null}, ${d.last_name || null}, ${d.ssn_encrypted || null}, ${d.date_of_birth || null}, ${d.email || null}, ${d.phone || null}, ${d.address_line1 || null}, ${d.address_line2 || null}, ${d.city || null}, ${d.state || null}, ${d.zip_code || null}, NOW())
+          VALUES (${userId}, ${d.first_name || null}, ${d.middle_initial || null}, ${d.last_name || null}, ${encryptedSsn || null}, ${d.date_of_birth || null}, ${d.email || null}, ${d.phone || null}, ${d.address_line1 || null}, ${d.address_line2 || null}, ${d.city || null}, ${d.state || null}, ${d.zip_code || null}, NOW())
           ON CONFLICT (user_id) DO UPDATE SET
             first_name = COALESCE(EXCLUDED.first_name, personal_information.first_name),
             middle_initial = COALESCE(EXCLUDED.middle_initial, personal_information.middle_initial),
@@ -192,9 +206,17 @@ serve(async (req: Request) => {
             updated_at = NOW()
         `
         const res = await db.queryObject`
-          SELECT * FROM personal_information WHERE user_id = ${userId}
+          SELECT id, user_id, first_name, middle_initial, last_name,
+            CASE WHEN ssn_encrypted IS NOT NULL AND ssn_encrypted != ''
+              THEN decrypt_ssn(ssn_encrypted, ${ssnEncryptionKey})
+              ELSE ssn_encrypted
+            END AS ssn_encrypted,
+            date_of_birth, email, phone, address_line1, address_line2,
+            city, state, zip_code, created_at, updated_at
+          FROM personal_information WHERE user_id = ${userId}
         `
         result = res.rows[0]
+        await logAudit('write', 'personal_information')
         break
       }
 
@@ -383,6 +405,68 @@ serve(async (req: Request) => {
           DELETE FROM packet_status WHERE user_id = ${userId}
         `
         result = { success: true }
+        break
+      }
+
+      // ==================== Secondary Conditions ====================
+      case 'get_secondary_conditions': {
+        const res = await db.queryObject`
+          SELECT sc.* FROM secondary_conditions sc
+          JOIN disability_claims dc ON dc.id = sc.primary_claim_id
+          WHERE dc.user_id = ${userId} AND sc.primary_claim_id = ${id}
+          ORDER BY sc.created_at ASC
+        `
+        result = res.rows
+        break
+      }
+
+      case 'create_secondary_condition': {
+        const d = data!
+        // Verify the claim belongs to the user
+        const claimCheck = await db.queryObject`
+          SELECT id FROM disability_claims WHERE id = ${id} AND user_id = ${userId}
+        `
+        if (claimCheck.rows.length === 0) {
+          await db.end()
+          return new Response(
+            JSON.stringify({ error: 'Claim not found or access denied' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        const res = await db.queryObject`
+          INSERT INTO secondary_conditions (primary_claim_id, disability_code, description, percentage, date_awarded, created_at)
+          VALUES (${id}, ${d.disability_code || null}, ${d.description || null}, ${d.percentage || null}, ${d.date_awarded || null}, NOW())
+          RETURNING *
+        `
+        result = res.rows[0]
+        break
+      }
+
+      case 'delete_secondary_condition': {
+        // Verify ownership through the claim
+        await db.queryObject`
+          DELETE FROM secondary_conditions
+          WHERE id = ${id}
+          AND primary_claim_id IN (SELECT dc.id FROM disability_claims dc WHERE dc.user_id = ${userId})
+        `
+        result = { success: true }
+        break
+      }
+
+      // ==================== Payment Operations ====================
+      case 'get_payments': {
+        const res = await db.queryObject`
+          SELECT * FROM payments WHERE user_id = ${userId} ORDER BY created_at DESC
+        `
+        result = res.rows
+        break
+      }
+
+      case 'get_payment_status': {
+        const res = await db.queryObject`
+          SELECT * FROM payments WHERE user_id = ${userId} AND status = 'completed' LIMIT 1
+        `
+        result = res.rows[0] || null
         break
       }
 

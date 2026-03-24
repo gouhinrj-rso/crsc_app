@@ -704,9 +704,17 @@ serve(async (req: Request) => {
     // Connect to Google Cloud PostgreSQL
     db = await getDbClient()
 
-    // Fetch user data from external PostgreSQL
+    // Fetch user data from external PostgreSQL (decrypt SSN for form generation)
+    const ssnEncryptionKey = Deno.env.get('SSN_ENCRYPTION_KEY') || Deno.env.get('DB_PASSWORD')!
     const personalInfoResult = await db.queryObject`
-      SELECT * FROM personal_information WHERE user_id = ${userId}
+      SELECT id, user_id, first_name, middle_initial, last_name,
+        CASE WHEN ssn_encrypted IS NOT NULL AND ssn_encrypted != ''
+          THEN decrypt_ssn(ssn_encrypted, ${ssnEncryptionKey})
+          ELSE ssn_encrypted
+        END AS ssn_encrypted,
+        date_of_birth, email, phone, address_line1, address_line2,
+        city, state, zip_code, created_at, updated_at
+      FROM personal_information WHERE user_id = ${userId}
     `
     const militaryServiceResult = await db.queryObject`
       SELECT * FROM military_service WHERE user_id = ${userId}
@@ -741,14 +749,111 @@ serve(async (req: Request) => {
         claims
       )
     } else if (documentType === 'package') {
-      // For package, we'll generate DD2860 for now
-      // In production, this would create a ZIP with all documents
-      pdfBytes = await generateDD2860(
+      // Generate a combined PDF package: cover letter + DD2860
+      const dd2860Bytes = await generateDD2860(
         personalInfo,
         militaryService,
         vaDisability,
         claims
       )
+
+      // Create combined document
+      const packageDoc = await PDFDocument.create()
+
+      // Generate and embed cover letter
+      const coverLetterDoc = await PDFDocument.create()
+      const coverBytes = await generateCoverLetter(
+        coverLetterDoc,
+        personalInfo,
+        militaryService,
+        claims
+      )
+      const coverPdf = await PDFDocument.load(coverBytes)
+      const coverPages = await packageDoc.copyPages(coverPdf, coverPdf.getPageIndices())
+      for (const page of coverPages) {
+        packageDoc.addPage(page)
+      }
+
+      // Embed DD2860
+      const dd2860Pdf = await PDFDocument.load(dd2860Bytes)
+      const dd2860Pages = await packageDoc.copyPages(dd2860Pdf, dd2860Pdf.getPageIndices())
+      for (const page of dd2860Pages) {
+        packageDoc.addPage(page)
+      }
+
+      // Add submission instructions page
+      const instrPage = packageDoc.addPage([612, 792])
+      const instrFont = await packageDoc.embedFont(StandardFonts.Helvetica)
+      const instrBoldFont = await packageDoc.embedFont(StandardFonts.HelveticaBold)
+      let instrY = 740
+
+      instrPage.drawText('SUBMISSION INSTRUCTIONS', { x: 50, y: instrY, size: 16, font: instrBoldFont })
+      instrY -= 30
+
+      const branch = (militaryService as Record<string, unknown>)?.branch as string || 'army'
+      const branchAddresses: Record<string, { name: string; address: string[] }> = {
+        army: {
+          name: 'Army CRSC',
+          address: ['Department of the Army', 'U.S. Army Human Resources Command', 'ATTN: AHRC-PDR-C (CRSC), Dept 420', '1600 Spearhead Division Avenue', 'Fort Knox, KY 40122-5402'],
+        },
+        navy: {
+          name: 'Navy CRSC',
+          address: ['Secretary of the Navy', 'Council of Review Boards', 'ATTN: Combat Related Special Compensation Branch', '720 Kennon Street SE, Suite 309', 'Washington Navy Yard, DC 20374-5023'],
+        },
+        marine_corps: {
+          name: 'Marine Corps CRSC',
+          address: ['Secretary of the Navy', 'Council of Review Boards', 'ATTN: Combat Related Special Compensation Branch', '720 Kennon Street SE, Suite 309', 'Washington Navy Yard, DC 20374-5023'],
+        },
+        air_force: {
+          name: 'Air Force CRSC',
+          address: ['United States Air Force', 'Disability Division (CRSC)', 'HQ AFPC/DPPDC', '550 C Street West', 'Randolph AFB, TX 78150-4708'],
+        },
+        space_force: {
+          name: 'Space Force CRSC',
+          address: ['United States Air Force', 'Disability Division (CRSC)', 'HQ AFPC/DPPDC', '550 C Street West', 'Randolph AFB, TX 78150-4708'],
+        },
+        coast_guard: {
+          name: 'Coast Guard CRSC',
+          address: ['Commander (PSC-PSD-MED)', 'Personnel Service Center, ATTN: CRSC', '2703 Martin Luther King Jr. Avenue SE', 'Washington, DC 20593-7200'],
+        },
+      }
+
+      const addr = branchAddresses[branch] || branchAddresses.army
+
+      instrPage.drawText(`Mail your complete package to:`, { x: 50, y: instrY, size: 11, font: instrBoldFont })
+      instrY -= 20
+      for (const line of addr.address) {
+        instrPage.drawText(line, { x: 70, y: instrY, size: 10, font: instrFont })
+        instrY -= 14
+      }
+      instrY -= 20
+
+      const instructions = [
+        '1. Print all pages of this package on standard 8.5" x 11" paper.',
+        '2. Sign and date the DD Form 2860 certification page.',
+        '3. Attach copies of all supporting documents (DD214, retirement orders, VA rating decisions, etc.).',
+        '4. DO NOT send original documents — send copies only.',
+        '5. Send via USPS Certified Mail with Return Receipt for tracking.',
+        '6. Keep a complete copy of everything you submit for your records.',
+        '7. Expected processing time is 6-12 months depending on the branch.',
+        '8. You will receive written notification of the decision by mail.',
+      ]
+
+      for (const instr of instructions) {
+        instrPage.drawText(instr, { x: 50, y: instrY, size: 10, font: instrFont })
+        instrY -= 18
+      }
+
+      instrY -= 20
+      instrPage.drawText('IMPORTANT REMINDERS', { x: 50, y: instrY, size: 12, font: instrBoldFont })
+      instrY -= 18
+      instrPage.drawText('Following the Supreme Court\'s June 2025 ruling in Soto v. United States,', { x: 50, y: instrY, size: 9, font: instrFont })
+      instrY -= 14
+      instrPage.drawText('the previous 6-year back pay limit has been eliminated. Eligible veterans', { x: 50, y: instrY, size: 9, font: instrFont })
+      instrY -= 14
+      instrPage.drawText('may now receive full retroactive payments to their initial eligibility date.', { x: 50, y: instrY, size: 9, font: instrFont })
+
+      pdfBytes = await packageDoc.save()
     } else {
       await db.end()
       return new Response(

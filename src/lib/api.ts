@@ -113,46 +113,31 @@ export async function deleteDisabilityClaim(claimId: string, userId?: string): P
   return { data: null, error: null }
 }
 
-// Secondary Conditions API - these stay with Supabase for now as they're not PHI
-export async function getSecondaryConditions(claimId: string): Promise<ApiResponse<Tables['secondary_conditions']['Row'][]>> {
-  const { data, error } = await supabase
-    .from('secondary_conditions')
-    .select('*')
-    .eq('primary_claim_id', claimId)
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    return { data: null, error: error.message }
-  }
-  return { data: data || [], error: null }
+// Secondary Conditions API - routed through db-proxy for consistency
+export async function getSecondaryConditions(claimId: string, userId?: string): Promise<ApiResponse<Tables['secondary_conditions']['Row'][]>> {
+  const currentUserId = userId || (await supabase.auth.getUser()).data.user?.id || ''
+  const result = await callDbProxy<Tables['secondary_conditions']['Row'][]>('get_secondary_conditions', currentUserId, undefined, claimId)
+  return { data: result.data || [], error: result.error }
 }
 
 export async function createSecondaryCondition(
   claimId: string,
-  condition: Omit<Tables['secondary_conditions']['Insert'], 'primary_claim_id'>
+  condition: Omit<Tables['secondary_conditions']['Insert'], 'primary_claim_id'>,
+  userId?: string
 ): Promise<ApiResponse<Tables['secondary_conditions']['Row']>> {
-  const { data, error } = await supabase
-    .from('secondary_conditions')
-    .insert({ ...condition, primary_claim_id: claimId })
-    .select()
-    .single()
-
-  if (error) {
-    return { data: null, error: error.message }
-  }
-  return { data, error: null }
+  const currentUserId = userId || (await supabase.auth.getUser()).data.user?.id || ''
+  return callDbProxy<Tables['secondary_conditions']['Row']>('create_secondary_condition', currentUserId, condition as Record<string, unknown>, claimId)
 }
 
-export async function deleteSecondaryCondition(conditionId: string): Promise<ApiResponse<null>> {
-  const { error } = await supabase
-    .from('secondary_conditions')
-    .delete()
-    .eq('id', conditionId)
-
-  if (error) {
-    return { data: null, error: error.message }
-  }
+export async function deleteSecondaryCondition(conditionId: string, userId?: string): Promise<ApiResponse<null>> {
+  const currentUserId = userId || (await supabase.auth.getUser()).data.user?.id || ''
+  await callDbProxy<{ success: boolean }>('delete_secondary_condition', currentUserId, undefined, conditionId)
   return { data: null, error: null }
+}
+
+// Payment Status API
+export async function getPaymentStatus(userId: string): Promise<ApiResponse<Tables['payments']['Row']>> {
+  return callDbProxy<Tables['payments']['Row']>('get_payment_status', userId)
 }
 
 // Documents API
