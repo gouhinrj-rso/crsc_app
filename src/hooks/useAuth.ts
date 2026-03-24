@@ -224,6 +224,71 @@ export function useAuth() {
     }
   }, [state.user?.id, checkVerificationStatus])
 
+  // MFA - Enroll TOTP
+  const enrollMfa = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: 'totp',
+        friendlyName: 'CRSC Authenticator',
+      })
+      if (error) return { success: false, error: error.message }
+      return {
+        success: true,
+        data: {
+          id: data.id,
+          qrCode: data.totp.qr_code,
+          secret: data.totp.secret,
+          uri: data.totp.uri,
+        },
+      }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'MFA enrollment failed' }
+    }
+  }, [])
+
+  // MFA - Verify TOTP during enrollment
+  const verifyMfa = useCallback(async (factorId: string, code: string) => {
+    try {
+      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId,
+      })
+      if (challengeError) return { success: false, error: challengeError.message }
+
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challengeData.id,
+        code,
+      })
+      if (verifyError) return { success: false, error: verifyError.message }
+
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'MFA verification failed' }
+    }
+  }, [])
+
+  // MFA - Unenroll
+  const unenrollMfa = useCallback(async (factorId: string) => {
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId })
+      if (error) return { success: false, error: error.message }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'MFA unenrollment failed' }
+    }
+  }, [])
+
+  // MFA - List factors
+  const listMfaFactors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.auth.mfa.listFactors()
+      if (error) return { success: false, error: error.message, factors: [] }
+      return { success: true, factors: data.totp || [] }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to list MFA factors', factors: [] }
+    }
+  }, [])
+
   return {
     ...state,
     signUp,
@@ -233,6 +298,10 @@ export function useAuth() {
     updatePassword,
     clearError,
     refreshVerificationStatus,
+    enrollMfa,
+    verifyMfa,
+    unenrollMfa,
+    listMfaFactors,
     isAuthenticated: !!state.user,
     isVeteranVerified: state.veteranVerified,
   }

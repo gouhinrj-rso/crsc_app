@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuthContext } from '@/contexts/AuthContext'
 import { DevModeProvider } from '@/contexts/DevModeContext'
 import { Toaster } from '@/components/ui/sonner'
+import { useSessionTimeout } from '@/hooks/useSessionTimeout'
+import { SessionTimeoutWarning } from '@/components/SessionTimeoutWarning'
 
 // Pages
 import Landing from '@/pages/Landing'
@@ -18,6 +20,7 @@ import Download from '@/pages/Download'
 import VerifyVeteran from '@/pages/VerifyVeteran'
 import Privacy from '@/pages/Privacy'
 import Terms from '@/pages/Terms'
+import StatusTracking from '@/pages/StatusTracking'
 
 // Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -55,6 +58,16 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>
+}
+
+function SessionTimeoutWrapper({ children }: { children: React.ReactNode }) {
+  const { showWarning, dismissWarning } = useSessionTimeout()
+  return (
+    <>
+      {children}
+      <SessionTimeoutWarning open={showWarning} onContinue={dismissWarning} />
+    </>
+  )
 }
 
 function AppRoutes() {
@@ -144,6 +157,15 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/status"
+        element={
+          <ProtectedRoute>
+            <StatusTracking />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect to landing */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -155,10 +177,12 @@ function App() {
     <Router>
       <AuthProvider>
         <DevModeProvider>
-          <div className="min-h-screen bg-background">
-            <AppRoutes />
-            <Toaster position="top-right" richColors />
-          </div>
+          <SessionTimeoutWrapper>
+            <div className="min-h-screen bg-background">
+              <AppRoutes />
+              <Toaster position="top-right" richColors />
+            </div>
+          </SessionTimeoutWrapper>
         </DevModeProvider>
       </AuthProvider>
     </Router>

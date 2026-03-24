@@ -3,6 +3,7 @@ import { useAuthContext } from '@/contexts/AuthContext'
 import { useDevMode } from '@/contexts/DevModeContext'
 import { useFormData } from '@/hooks/useFormData'
 import { APPLICATION_STEPS } from '@/lib/constants'
+import { MfaSetup } from '@/components/MfaSetup'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -346,6 +347,11 @@ export default function Dashboard() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Security Settings */}
+        <div className="mt-8">
+          <MfaSetup />
         </div>
 
         {/* Important Notice */}

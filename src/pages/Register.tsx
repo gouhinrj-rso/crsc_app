@@ -196,13 +196,13 @@ export default function Register() {
                   className="text-sm text-muted-foreground leading-tight cursor-pointer"
                 >
                   I agree to the{' '}
-                  <a href="#" className="text-primary hover:underline">
+                  <Link to="/terms" className="text-primary hover:underline">
                     Terms of Service
-                  </a>{' '}
+                  </Link>{' '}
                   and{' '}
-                  <a href="#" className="text-primary hover:underline">
+                  <Link to="/privacy" className="text-primary hover:underline">
                     Privacy Policy
-                  </a>
+                  </Link>
                   , including HIPAA acknowledgment for handling of protected health information.
                 </label>
               </div>

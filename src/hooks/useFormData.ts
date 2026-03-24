@@ -12,6 +12,7 @@ import {
   deleteDisabilityClaim,
   getDocuments,
   createDocument,
+  uploadDocument,
   deleteDocument,
   getPacketStatus,
   updatePacketStep,
@@ -209,6 +210,25 @@ export function useFormData(userId: string | undefined) {
     [userId]
   )
 
+  // Upload document with file data to GCS
+  const uploadAndAddDocument = useCallback(
+    async (file: File, documentType: string) => {
+      if (!userId) return { success: false, error: 'Not authenticated' }
+
+      const result = await uploadDocument(userId, file, documentType)
+      if (result.error) {
+        return { success: false, error: result.error }
+      }
+
+      setState((prev) => ({
+        ...prev,
+        documents: [result.data!, ...prev.documents],
+      }))
+      return { success: true, data: result.data }
+    },
+    [userId]
+  )
+
   const removeDocument = useCallback(async (docId: string) => {
     const result = await deleteDocument(docId)
     if (result.error) {
@@ -328,6 +348,7 @@ export function useFormData(userId: string | undefined) {
     editDisabilityClaim,
     removeDisabilityClaim,
     addDocument,
+    uploadAndAddDocument,
     removeDocument,
     setStepStatus,
     resetProgress,

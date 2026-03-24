@@ -32,6 +32,7 @@ import {
   ExternalLink,
   Copy,
   Info,
+  Clock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -454,6 +455,25 @@ export default function DownloadPage() {
               <Button className="ml-auto" onClick={() => window.print()}>
                 <Printer className="mr-2 h-4 w-4" />
                 Print Instructions
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Status Tracking */}
+        <Card className="mt-8 border-primary/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <Clock className="h-8 w-8 text-primary" />
+              <div>
+                <h3 className="font-semibold">Track Your Submission</h3>
+                <p className="text-muted-foreground">
+                  After mailing your packet, track its status and get help with reconsideration
+                  if needed.
+                </p>
+              </div>
+              <Button className="ml-auto" variant="outline" onClick={() => navigate('/status')}>
+                Track Status
               </Button>
             </div>
           </CardContent>
