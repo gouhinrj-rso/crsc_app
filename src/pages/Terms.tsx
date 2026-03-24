@@ -75,8 +75,7 @@ export default function Terms() {
             <h2 className="text-xl font-semibold mb-3">4. Eligibility</h2>
             <p className="text-muted-foreground">
               To use our Service, you must be at least 18 years old and either a U.S. military
-              veteran or an authorized representative acting on behalf of a veteran. We may
-              require verification of your veteran status through ID.me or similar services.
+              veteran or an authorized representative acting on behalf of a veteran.
             </p>
           </section>
 
@@ -91,21 +90,11 @@ export default function Terms() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">6. Veteran Verification</h2>
-            <p className="text-muted-foreground">
-              We require verification of veteran status through ID.me before generating your
-              final CRSC filing packet. This verification helps ensure our Service is used
-              only by eligible veterans and protects against fraud.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-3">7. Fees and Payment</h2>
+            <h2 className="text-xl font-semibold mb-3">6. Fees and Payment</h2>
             <p className="text-muted-foreground">
               Our Service charges a one-time fee for generating your complete CRSC filing
-              packet. Payment is processed securely through Stripe. All fees are clearly
-              displayed before payment and are non-refundable once the packet has been
-              generated and delivered, except as required by law.
+              packet. All fees are clearly displayed before payment and are non-refundable
+              once the packet has been generated and delivered, except as required by law.
             </p>
           </section>
 

@@ -8,17 +8,13 @@ interface AuthContextValue {
   loading: boolean
   error: string | null
   isAuthenticated: boolean
-  isVeteranVerified: boolean
   isAdmin: boolean
-  veteranVerified: boolean
-  veteranVerifiedAt: string | null
   signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: User | null }>
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: User | null }>
   signOut: () => Promise<{ success: boolean; error?: string }>
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>
   clearError: () => void
-  refreshVerificationStatus: () => Promise<void>
   enrollMfa: () => Promise<{ success: boolean; error?: string; data?: { id: string; qrCode: string; secret: string; uri: string } }>
   verifyMfa: (factorId: string, code: string) => Promise<{ success: boolean; error?: string }>
   unenrollMfa: (factorId: string) => Promise<{ success: boolean; error?: string }>

@@ -1,43 +1,18 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.24.3'
-import { Client } from 'https://deno.land/x/postgres@v0.17.0/mod.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Create PostgreSQL client for Google Cloud with TLS
-async function getDbClient(): Promise<Client> {
-  const hostname = Deno.env.get('DB_HOST')!
-  const port = parseInt(Deno.env.get('DB_PORT') || '5432')
-  const user = Deno.env.get('DB_USER')!
-  const password = Deno.env.get('DB_PASSWORD')!
-  const database = Deno.env.get('DB_NAME')!
-
-  console.log(`[chat-handler] Connecting to PostgreSQL at ${hostname}:${port}/${database} as ${user}`)
-
-  const client = new Client({
-    hostname,
-    port,
-    user,
-    password,
-    database,
-    tls: {
-      enabled: true,
-      enforce: true,  // Force TLS, don't fall back to non-TLS
-      caCertificates: [],  // Accept any certificate (self-signed)
-    },
-  })
-
-  try {
-    await client.connect()
-    console.log('[chat-handler] Successfully connected to PostgreSQL with TLS')
-    return client
-  } catch (error) {
-    console.error('[chat-handler] Failed to connect to PostgreSQL:', error)
-    throw error
-  }
+// Create Supabase admin client (bypasses RLS)
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
 }
 
 // CRSC System prompt with reference information
@@ -279,9 +254,9 @@ const tools: Anthropic.Tool[] = [
   },
 ]
 
-// Process tool calls and save data to database
+// Process tool calls and save data via Supabase
 async function processToolCall(
-  db: Client,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   userId: string,
   toolName: string,
   toolInput: Record<string, unknown>
@@ -289,76 +264,93 @@ async function processToolCall(
   try {
     switch (toolName) {
       case 'save_personal_info': {
-        await db.queryObject`
-          INSERT INTO personal_information (user_id, first_name, middle_initial, last_name, ssn_encrypted, date_of_birth, email, phone, address_line1, address_line2, city, state, zip_code, updated_at)
-          VALUES (${userId}, ${toolInput.first_name}, ${toolInput.middle_initial || null}, ${toolInput.last_name}, ${toolInput.ssn || null}, ${toolInput.date_of_birth || null}, ${toolInput.email || null}, ${toolInput.phone || null}, ${toolInput.address_line1 || null}, ${toolInput.address_line2 || null}, ${toolInput.city || null}, ${toolInput.state || null}, ${toolInput.zip_code || null}, NOW())
-          ON CONFLICT (user_id) DO UPDATE SET
-            first_name = EXCLUDED.first_name,
-            middle_initial = EXCLUDED.middle_initial,
-            last_name = EXCLUDED.last_name,
-            ssn_encrypted = COALESCE(EXCLUDED.ssn_encrypted, personal_information.ssn_encrypted),
-            date_of_birth = COALESCE(EXCLUDED.date_of_birth, personal_information.date_of_birth),
-            email = COALESCE(EXCLUDED.email, personal_information.email),
-            phone = COALESCE(EXCLUDED.phone, personal_information.phone),
-            address_line1 = COALESCE(EXCLUDED.address_line1, personal_information.address_line1),
-            address_line2 = COALESCE(EXCLUDED.address_line2, personal_information.address_line2),
-            city = COALESCE(EXCLUDED.city, personal_information.city),
-            state = COALESCE(EXCLUDED.state, personal_information.state),
-            zip_code = COALESCE(EXCLUDED.zip_code, personal_information.zip_code),
-            updated_at = NOW()
-        `
+        const { error } = await supabase
+          .from('personal_information')
+          .upsert({
+            user_id: userId,
+            first_name: toolInput.first_name as string,
+            middle_initial: (toolInput.middle_initial as string) || null,
+            last_name: toolInput.last_name as string,
+            ssn_encrypted: (toolInput.ssn as string) || null,
+            date_of_birth: (toolInput.date_of_birth as string) || null,
+            email: (toolInput.email as string) || null,
+            phone: (toolInput.phone as string) || null,
+            address_line1: (toolInput.address_line1 as string) || null,
+            address_line2: (toolInput.address_line2 as string) || null,
+            city: (toolInput.city as string) || null,
+            state: (toolInput.state as string) || null,
+            zip_code: (toolInput.zip_code as string) || null,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+        if (error) throw error
         return 'Personal information saved successfully.'
       }
 
       case 'save_military_service': {
-        await db.queryObject`
-          INSERT INTO military_service (user_id, branch, service_number, retired_rank, retirement_date, years_of_service, retirement_type, updated_at)
-          VALUES (${userId}, ${toolInput.branch}, ${toolInput.service_number || null}, ${toolInput.retired_rank || null}, ${toolInput.retirement_date || null}, ${toolInput.years_of_service || null}, ${toolInput.retirement_type}, NOW())
-          ON CONFLICT (user_id) DO UPDATE SET
-            branch = EXCLUDED.branch,
-            service_number = COALESCE(EXCLUDED.service_number, military_service.service_number),
-            retired_rank = COALESCE(EXCLUDED.retired_rank, military_service.retired_rank),
-            retirement_date = COALESCE(EXCLUDED.retirement_date, military_service.retirement_date),
-            years_of_service = COALESCE(EXCLUDED.years_of_service, military_service.years_of_service),
-            retirement_type = EXCLUDED.retirement_type,
-            updated_at = NOW()
-        `
+        const { error } = await supabase
+          .from('military_service')
+          .upsert({
+            user_id: userId,
+            branch: toolInput.branch as string,
+            service_number: (toolInput.service_number as string) || null,
+            retired_rank: (toolInput.retired_rank as string) || null,
+            retirement_date: (toolInput.retirement_date as string) || null,
+            years_of_service: (toolInput.years_of_service as number) || null,
+            retirement_type: toolInput.retirement_type as string,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+        if (error) throw error
         return 'Military service information saved successfully.'
       }
 
       case 'save_va_disability_info': {
-        await db.queryObject`
-          INSERT INTO va_disability_info (user_id, va_file_number, current_va_rating, va_decision_date, has_va_waiver, receives_crdp, updated_at)
-          VALUES (${userId}, ${toolInput.va_file_number || null}, ${toolInput.current_va_rating}, ${toolInput.va_decision_date || null}, ${toolInput.has_va_waiver || false}, ${toolInput.receives_crdp || false}, NOW())
-          ON CONFLICT (user_id) DO UPDATE SET
-            va_file_number = COALESCE(EXCLUDED.va_file_number, va_disability_info.va_file_number),
-            current_va_rating = EXCLUDED.current_va_rating,
-            va_decision_date = COALESCE(EXCLUDED.va_decision_date, va_disability_info.va_decision_date),
-            has_va_waiver = EXCLUDED.has_va_waiver,
-            receives_crdp = EXCLUDED.receives_crdp,
-            updated_at = NOW()
-        `
+        const { error } = await supabase
+          .from('va_disability_info')
+          .upsert({
+            user_id: userId,
+            va_file_number: (toolInput.va_file_number as string) || null,
+            current_va_rating: toolInput.current_va_rating as number,
+            va_decision_date: (toolInput.va_decision_date as string) || null,
+            has_va_waiver: (toolInput.has_va_waiver as boolean) || false,
+            receives_crdp: (toolInput.receives_crdp as boolean) || false,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+        if (error) throw error
         return 'VA disability information saved successfully.'
       }
 
       case 'save_disability_claim': {
-        await db.queryObject`
-          INSERT INTO disability_claims (user_id, disability_title, disability_code, body_part_affected, date_awarded_by_va, initial_rating_percentage, current_rating_percentage, combat_related_code, unit_of_assignment, location_of_injury, description_of_event, received_purple_heart, updated_at)
-          VALUES (${userId}, ${toolInput.disability_title}, ${toolInput.disability_code || null}, ${toolInput.body_part_affected || null}, ${toolInput.date_awarded_by_va || null}, ${toolInput.initial_rating_percentage || null}, ${toolInput.current_rating_percentage}, ${toolInput.combat_related_code}, ${toolInput.unit_of_assignment || null}, ${toolInput.location_of_injury || null}, ${toolInput.description_of_event || null}, ${toolInput.received_purple_heart || false}, NOW())
-        `
+        const { error } = await supabase
+          .from('disability_claims')
+          .insert({
+            user_id: userId,
+            disability_title: toolInput.disability_title as string,
+            disability_code: (toolInput.disability_code as string) || null,
+            body_part_affected: (toolInput.body_part_affected as string) || null,
+            date_awarded_by_va: (toolInput.date_awarded_by_va as string) || null,
+            initial_rating_percentage: (toolInput.initial_rating_percentage as number) || null,
+            current_rating_percentage: toolInput.current_rating_percentage as number,
+            combat_related_code: toolInput.combat_related_code as string,
+            unit_of_assignment: (toolInput.unit_of_assignment as string) || null,
+            location_of_injury: (toolInput.location_of_injury as string) || null,
+            description_of_event: (toolInput.description_of_event as string) || null,
+            received_purple_heart: (toolInput.received_purple_heart as boolean) || false,
+          })
+        if (error) throw error
         return `Disability claim "${toolInput.disability_title}" saved successfully.`
       }
 
       case 'update_phase_status': {
-        const completedAt = toolInput.status === 'completed' ? 'NOW()' : 'NULL'
-        await db.queryObject`
-          INSERT INTO packet_status (user_id, step_name, step_status, completed_at, updated_at)
-          VALUES (${userId}, ${toolInput.step_name}, ${toolInput.status}, ${toolInput.status === 'completed' ? new Date() : null}, NOW())
-          ON CONFLICT (user_id, step_name) DO UPDATE SET
-            step_status = EXCLUDED.step_status,
-            completed_at = EXCLUDED.completed_at,
-            updated_at = NOW()
-        `
+        const { error } = await supabase
+          .from('packet_status')
+          .upsert({
+            user_id: userId,
+            step_name: toolInput.step_name as string,
+            step_status: toolInput.status as string,
+            completed_at: toolInput.status === 'completed' ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,step_name' })
+        if (error) throw error
         return `Phase "${toolInput.step_name}" status updated to "${toolInput.status}".`
       }
 
@@ -376,8 +368,6 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
-
-  let db: Client | null = null
 
   try {
     const { userId, message, conversationHistory } = await req.json() as ChatRequest
@@ -397,29 +387,35 @@ serve(async (req: Request) => {
       apiKey: Deno.env.get('ANTHROPIC_API_KEY'),
     })
 
-    // Connect to Google Cloud PostgreSQL
-    db = await getDbClient()
+    // Connect to Supabase
+    const supabase = getSupabaseAdmin()
 
     // Fetch user context from database
-    const personalInfoResult = await db.queryObject<{first_name: string, last_name: string}>`
-      SELECT first_name, last_name FROM personal_information WHERE user_id = ${userId}
-    `
-    const militaryServiceResult = await db.queryObject<{branch: string, retirement_date: string}>`
-      SELECT branch, retirement_date FROM military_service WHERE user_id = ${userId}
-    `
-    const vaDisabilityResult = await db.queryObject<{current_va_rating: number}>`
-      SELECT current_va_rating FROM va_disability_info WHERE user_id = ${userId}
-    `
-    const claimsResult = await db.queryObject<{count: number}>`
-      SELECT COUNT(*) as count FROM disability_claims WHERE user_id = ${userId}
-    `
+    const { data: personalInfo } = await supabase
+      .from('personal_information')
+      .select('first_name, last_name')
+      .eq('user_id', userId)
+      .single()
+
+    const { data: militaryService } = await supabase
+      .from('military_service')
+      .select('branch, retirement_date')
+      .eq('user_id', userId)
+      .single()
+
+    const { data: vaDisability } = await supabase
+      .from('va_disability_info')
+      .select('current_va_rating')
+      .eq('user_id', userId)
+      .single()
+
+    const { count: claimsCount } = await supabase
+      .from('disability_claims')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
 
     // Build context string with user's current data
     let userContext = ''
-    const personalInfo = personalInfoResult.rows[0]
-    const militaryService = militaryServiceResult.rows[0]
-    const vaDisability = vaDisabilityResult.rows[0]
-    const claimsCount = claimsResult.rows[0]?.count || 0
 
     if (personalInfo) {
       userContext += `\nUser's Personal Info: ${personalInfo.first_name || 'Not provided'} ${personalInfo.last_name || ''}`
@@ -444,10 +440,7 @@ serve(async (req: Request) => {
     messages.push({ role: 'user', content: message })
 
     // Save user message to chat history immediately
-    await db.queryObject`
-      INSERT INTO chat_history (user_id, message, role, created_at)
-      VALUES (${userId}, ${message}, 'user', NOW())
-    `
+    await supabase.from('chat_history').insert({ user_id: userId, message, role: 'user' })
 
     // If client wants streaming, use SSE
     if (wantsStreaming) {
@@ -544,7 +537,7 @@ serve(async (req: Request) => {
                     input: parsedInput,
                   })
 
-                  const result = await processToolCall(db!, userId, tool.name, parsedInput as Record<string, unknown>)
+                  const result = await processToolCall(supabase, userId, tool.name, parsedInput as Record<string, unknown>)
                   toolResults.push({
                     type: 'tool_result',
                     tool_use_id: tool.id,
@@ -569,24 +562,15 @@ serve(async (req: Request) => {
             }
 
             // Save the complete assistant response to chat history
-            await db!.queryObject`
-              INSERT INTO chat_history (user_id, message, role, created_at)
-              VALUES (${userId}, ${fullResponse}, 'assistant', NOW())
-            `
+            await supabase.from('chat_history').insert({ user_id: userId, message: fullResponse, role: 'assistant' })
 
             // Send done signal
             sendEvent('[DONE]')
             controller.close()
-
-            // Close database connection
-            await db!.end()
           } catch (error) {
             console.error('Streaming error:', error)
             sendEvent(JSON.stringify({ error: 'Streaming failed' }))
             controller.close()
-            if (db) {
-              try { await db.end() } catch { /* ignore */ }
-            }
           }
         }
       })
@@ -622,7 +606,7 @@ serve(async (req: Request) => {
           finalResponse += block.text
         } else if (block.type === 'tool_use') {
           // Process the tool call
-          const result = await processToolCall(db, userId, block.name, block.input as Record<string, unknown>)
+          const result = await processToolCall(supabase, userId, block.name, block.input as Record<string, unknown>)
           toolResults.push({
             type: 'tool_result',
             tool_use_id: block.id,
@@ -646,13 +630,7 @@ serve(async (req: Request) => {
     }
 
     // Save assistant response to chat history
-    await db.queryObject`
-      INSERT INTO chat_history (user_id, message, role, created_at)
-      VALUES (${userId}, ${finalResponse}, 'assistant', NOW())
-    `
-
-    // Close database connection
-    await db.end()
+    await supabase.from('chat_history').insert({ user_id: userId, message: finalResponse, role: 'assistant' })
 
     return new Response(
       JSON.stringify({ reply: finalResponse }),
@@ -660,13 +638,6 @@ serve(async (req: Request) => {
     )
   } catch (error) {
     console.error('Chat handler error:', error)
-    if (db) {
-      try {
-        await db.end()
-      } catch {
-        // Ignore close errors
-      }
-    }
     return new Response(
       JSON.stringify({ error: 'Failed to process chat message' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

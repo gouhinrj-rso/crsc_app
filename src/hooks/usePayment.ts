@@ -1,12 +1,8 @@
 import { useState, useCallback } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
-import { createPaymentIntent, createPayment, getPayments } from '@/lib/api'
+import { createPayment, getPayments } from '@/lib/api'
 import { PAYMENT_AMOUNT } from '@/lib/constants'
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '')
-
 interface PaymentState {
-  clientSecret: string | null
   loading: boolean
   error: string | null
   paymentComplete: boolean
@@ -14,68 +10,43 @@ interface PaymentState {
 
 export function usePayment(userId: string | undefined) {
   const [state, setState] = useState<PaymentState>({
-    clientSecret: null,
     loading: false,
     error: null,
     paymentComplete: false,
   })
 
-  const initializePayment = useCallback(async () => {
-    if (!userId) {
-      setState((prev) => ({ ...prev, error: 'Not authenticated' }))
-      return
-    }
+  const checkPaymentStatus = useCallback(async () => {
+    if (!userId) return
 
-    setState((prev) => ({ ...prev, loading: true, error: null }))
+    setState((prev) => ({ ...prev, loading: true }))
 
     try {
-      // Check if user already paid
       const paymentsResult = await getPayments(userId)
       const completedPayment = paymentsResult.data?.find(
         (p) => p.status === 'completed'
       )
 
-      if (completedPayment) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          paymentComplete: true,
-        }))
-        return
-      }
-
-      // Create payment intent
-      const result = await createPaymentIntent(userId, PAYMENT_AMOUNT)
-
-      if (result.error) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: result.error,
-        }))
-        return
-      }
-
       setState((prev) => ({
         ...prev,
         loading: false,
-        clientSecret: result.data?.clientSecret || null,
+        paymentComplete: !!completedPayment,
       }))
     } catch (err) {
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: err instanceof Error ? err.message : 'Payment initialization failed',
+        error: err instanceof Error ? err.message : 'Failed to check payment status',
       }))
     }
   }, [userId])
 
-  const handlePaymentSuccess = useCallback(
-    async (paymentIntentId: string) => {
-      if (!userId) return
+  const handlePaymentSuccess = useCallback(async () => {
+    if (!userId) return
 
+    setState((prev) => ({ ...prev, loading: true }))
+
+    try {
       await createPayment(userId, {
-        stripe_payment_id: paymentIntentId,
         amount: PAYMENT_AMOUNT,
         status: 'completed',
         paid_at: new Date().toISOString(),
@@ -83,18 +54,17 @@ export function usePayment(userId: string | undefined) {
 
       setState((prev) => ({
         ...prev,
+        loading: false,
         paymentComplete: true,
       }))
-    },
-    [userId]
-  )
-
-  const handlePaymentError = useCallback((error: string) => {
-    setState((prev) => ({
-      ...prev,
-      error,
-    }))
-  }, [])
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : 'Payment recording failed',
+      }))
+    }
+  }, [userId])
 
   const clearError = useCallback(() => {
     setState((prev) => ({ ...prev, error: null }))
@@ -102,10 +72,8 @@ export function usePayment(userId: string | undefined) {
 
   return {
     ...state,
-    stripePromise,
-    initializePayment,
+    checkPaymentStatus,
     handlePaymentSuccess,
-    handlePaymentError,
     clearError,
     amount: PAYMENT_AMOUNT,
   }

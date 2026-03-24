@@ -423,7 +423,6 @@ export type Database = {
         Row: {
           id: string
           user_id: string
-          stripe_payment_id: string | null
           amount: number | null
           currency: string
           status: string | null
@@ -433,7 +432,6 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
-          stripe_payment_id?: string | null
           amount?: number | null
           currency?: string
           status?: string | null
@@ -443,7 +441,6 @@ export type Database = {
         Update: {
           id?: string
           user_id?: string
-          stripe_payment_id?: string | null
           amount?: number | null
           currency?: string
           status?: string | null

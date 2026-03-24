@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { createUserProfile, createAuditLog, getVerificationStatus, getUserProfile } from '@/lib/api'
+import { createUserProfile, createAuditLog, getUserProfile } from '@/lib/api'
 
 interface AuthState {
   user: User | null
   session: Session | null
   loading: boolean
   error: string | null
-  veteranVerified: boolean
-  veteranVerifiedAt: string | null
   isAdmin: boolean
 }
 
@@ -19,26 +17,8 @@ export function useAuth() {
     session: null,
     loading: true,
     error: null,
-    veteranVerified: false,
-    veteranVerifiedAt: null,
     isAdmin: false,
   })
-
-  // Function to check verification status (non-blocking)
-  const checkVerificationStatus = useCallback(async (userId: string) => {
-    try {
-      const result = await getVerificationStatus(userId)
-      if (result.data) {
-        setState((prev) => ({
-          ...prev,
-          veteranVerified: result.data?.veteran_verified ?? false,
-          veteranVerifiedAt: result.data?.veteran_verified_at ?? null,
-        }))
-      }
-    } catch (err) {
-      console.error('Failed to check verification status:', err)
-    }
-  }, [])
 
   // Function to check admin status (non-blocking)
   const checkAdminStatus = useCallback(async (userId: string) => {
@@ -73,9 +53,8 @@ export function useAuth() {
           error: error?.message ?? null,
         }))
 
-        // Check verification and admin status in background (non-blocking)
+        // Check admin status in background (non-blocking)
         if (session?.user) {
-          checkVerificationStatus(session.user.id)
           checkAdminStatus(session.user.id)
         }
       } catch (err) {
@@ -105,10 +84,8 @@ export function useAuth() {
 
         // Handle events in background (non-blocking)
         if (event === 'SIGNED_IN' && session?.user) {
-          // Fire and forget - don't block UI
           createUserProfile(session.user.id, session.user.email!).catch(console.error)
           createAuditLog(session.user.id, 'sign_in', 'auth').catch(console.error)
-          checkVerificationStatus(session.user.id)
           checkAdminStatus(session.user.id)
         }
 
@@ -116,8 +93,6 @@ export function useAuth() {
           createAuditLog(null, 'sign_out', 'auth').catch(console.error)
           setState((prev) => ({
             ...prev,
-            veteranVerified: false,
-            veteranVerifiedAt: null,
             isAdmin: false,
           }))
         }
@@ -128,7 +103,7 @@ export function useAuth() {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [checkVerificationStatus, checkAdminStatus])
+  }, [checkAdminStatus])
 
   const signUp = useCallback(async (email: string, password: string) => {
     setState((prev) => ({ ...prev, loading: true, error: null }))
@@ -217,13 +192,6 @@ export function useAuth() {
     setState((prev) => ({ ...prev, error: null }))
   }, [])
 
-  // Allow manual refresh of verification status
-  const refreshVerificationStatus = useCallback(async () => {
-    if (state.user?.id) {
-      await checkVerificationStatus(state.user.id)
-    }
-  }, [state.user?.id, checkVerificationStatus])
-
   // MFA - Enroll TOTP
   const enrollMfa = useCallback(async () => {
     try {
@@ -297,12 +265,10 @@ export function useAuth() {
     resetPassword,
     updatePassword,
     clearError,
-    refreshVerificationStatus,
     enrollMfa,
     verifyMfa,
     unenrollMfa,
     listMfaFactors,
     isAuthenticated: !!state.user,
-    isVeteranVerified: state.veteranVerified,
   }
 }

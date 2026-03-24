@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { Client } from 'https://deno.land/x/postgres@v0.17.0/mod.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1'
 
 const corsHeaders = {
@@ -7,21 +7,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Create PostgreSQL client for Google Cloud
-async function getDbClient(): Promise<Client> {
-  const client = new Client({
-    hostname: Deno.env.get('DB_HOST')!,
-    port: parseInt(Deno.env.get('DB_PORT') || '5432'),
-    user: Deno.env.get('DB_USER')!,
-    password: Deno.env.get('DB_PASSWORD')!,
-    database: Deno.env.get('DB_NAME')!,
-    tls: {
-      enabled: true,
-      enforce: true,
-    },
-  })
-  await client.connect()
-  return client
+// Create Supabase admin client (bypasses RLS)
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
 }
 
 interface GeneratePDFRequest {
@@ -689,8 +680,6 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  let db: Client | null = null
-
   try {
     const { userId, documentType } = await req.json() as GeneratePDFRequest
 
@@ -701,35 +690,35 @@ serve(async (req: Request) => {
       )
     }
 
-    // Connect to Google Cloud PostgreSQL
-    db = await getDbClient()
+    // Connect to Supabase
+    const supabase = getSupabaseAdmin()
 
-    // Fetch user data from external PostgreSQL (decrypt SSN for form generation)
-    const ssnEncryptionKey = Deno.env.get('SSN_ENCRYPTION_KEY') || Deno.env.get('DB_PASSWORD')!
-    const personalInfoResult = await db.queryObject`
-      SELECT id, user_id, first_name, middle_initial, last_name,
-        CASE WHEN ssn_encrypted IS NOT NULL AND ssn_encrypted != ''
-          THEN decrypt_ssn(ssn_encrypted, ${ssnEncryptionKey})
-          ELSE ssn_encrypted
-        END AS ssn_encrypted,
-        date_of_birth, email, phone, address_line1, address_line2,
-        city, state, zip_code, created_at, updated_at
-      FROM personal_information WHERE user_id = ${userId}
-    `
-    const militaryServiceResult = await db.queryObject`
-      SELECT * FROM military_service WHERE user_id = ${userId}
-    `
-    const vaDisabilityResult = await db.queryObject`
-      SELECT * FROM va_disability_info WHERE user_id = ${userId}
-    `
-    const claimsResult = await db.queryObject`
-      SELECT * FROM disability_claims WHERE user_id = ${userId}
-    `
+    // Fetch user data from Supabase
+    const { data: personalInfo } = await supabase
+      .from('personal_information')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
 
-    const personalInfo = personalInfoResult.rows[0]
-    const militaryService = militaryServiceResult.rows[0]
-    const vaDisability = vaDisabilityResult.rows[0]
-    const claims = claimsResult.rows || []
+    const { data: militaryService } = await supabase
+      .from('military_service')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    const { data: vaDisability } = await supabase
+      .from('va_disability_info')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    const { data: claimsData } = await supabase
+      .from('disability_claims')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+
+    const claims = claimsData || []
 
     let pdfBytes: Uint8Array
 
@@ -855,7 +844,6 @@ serve(async (req: Request) => {
 
       pdfBytes = await packageDoc.save()
     } else {
-      await db.end()
       return new Response(
         JSON.stringify({ error: 'Invalid document type' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -866,12 +854,12 @@ serve(async (req: Request) => {
     const base64Pdf = btoa(String.fromCharCode(...pdfBytes))
 
     // Create audit log entry
-    await db.queryObject`
-      INSERT INTO audit_log (user_id, action, resource_type, details, created_at)
-      VALUES (${userId}, 'pdf_generated', 'document', ${JSON.stringify({ document_type: documentType })}, NOW())
-    `
-
-    await db.end()
+    await supabase.from('audit_log').insert({
+      user_id: userId,
+      action: 'pdf_generated',
+      resource_type: 'document',
+      resource_id: null,
+    })
 
     return new Response(
       JSON.stringify({ pdf: base64Pdf }),
@@ -879,13 +867,6 @@ serve(async (req: Request) => {
     )
   } catch (error) {
     console.error('PDF generation error:', error)
-    if (db) {
-      try {
-        await db.end()
-      } catch {
-        // Ignore close errors
-      }
-    }
     return new Response(
       JSON.stringify({ error: 'Failed to generate PDF' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

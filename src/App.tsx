@@ -17,7 +17,6 @@ import Chat from '@/pages/Chat'
 import Review from '@/pages/Review'
 import Payment from '@/pages/Payment'
 import Download from '@/pages/Download'
-import VerifyVeteran from '@/pages/VerifyVeteran'
 import Privacy from '@/pages/Privacy'
 import Terms from '@/pages/Terms'
 import StatusTracking from '@/pages/StatusTracking'
@@ -113,14 +112,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Onboarding />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/verify-veteran"
-        element={
-          <ProtectedRoute>
-            <VerifyVeteran />
           </ProtectedRoute>
         }
       />

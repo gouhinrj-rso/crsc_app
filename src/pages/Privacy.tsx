@@ -42,7 +42,7 @@ export default function Privacy() {
               <li>Military service information (branch, rank, dates of service)</li>
               <li>VA disability information (ratings, service-connected conditions)</li>
               <li>Documents you upload (DD214, VA decision letters, medical records)</li>
-              <li>Information verified through ID.me (veteran/military status)</li>
+              <li>Social Security Number (encrypted at rest)</li>
             </ul>
           </section>
 
@@ -62,7 +62,7 @@ export default function Privacy() {
             <ul className="list-disc list-inside text-muted-foreground space-y-2">
               <li>Assist you in preparing your CRSC application</li>
               <li>Generate required forms and documents (DD Form 2860)</li>
-              <li>Verify your veteran status through ID.me</li>
+              <li>Verify your eligibility for CRSC benefits</li>
               <li>Communicate with you about your application</li>
               <li>Improve our Service and develop new features</li>
               <li>Comply with legal obligations</li>
@@ -73,8 +73,7 @@ export default function Privacy() {
             <h2 className="text-xl font-semibold mb-3">5. Information Sharing</h2>
             <p className="text-muted-foreground mb-3">We do not sell your personal information. We may share your information with:</p>
             <ul className="list-disc list-inside text-muted-foreground space-y-2">
-              <li><strong>ID.me:</strong> For veteran status verification</li>
-              <li><strong>Payment processors:</strong> To process payments (Stripe)</li>
+              <li><strong>Payment processors:</strong> To process payments securely</li>
               <li><strong>Service providers:</strong> Who assist in operating our Service</li>
               <li><strong>Legal authorities:</strong> When required by law</li>
             </ul>
@@ -113,8 +112,8 @@ export default function Privacy() {
           <section>
             <h2 className="text-xl font-semibold mb-3">9. Third-Party Services</h2>
             <p className="text-muted-foreground">
-              Our Service integrates with third-party services including ID.me for identity
-              verification, Stripe for payment processing, and Anthropic for AI assistance.
+              Our Service integrates with third-party services including Supabase for
+              authentication and data storage, and Anthropic for AI assistance.
               Each of these services has their own privacy policies governing their use of your data.
             </p>
           </section>

@@ -210,7 +210,7 @@ export function useFormData(userId: string | undefined) {
     [userId]
   )
 
-  // Upload document with file data to GCS
+  // Upload document with file data to Supabase Storage
   const uploadAndAddDocument = useCallback(
     async (file: File, documentType: string) => {
       if (!userId) return { success: false, error: 'Not authenticated' }
