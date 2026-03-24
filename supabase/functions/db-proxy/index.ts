@@ -67,6 +67,18 @@ serve(async (req: Request) => {
 
     db = await getDbClient()
 
+    // Helper to create audit log entries
+    async function logAudit(action: string, resourceType: string, resourceId?: string) {
+      try {
+        await db!.queryObject`
+          INSERT INTO audit_log (user_id, action, resource_type, resource_id, created_at)
+          VALUES (${userId}, ${action}, ${resourceType}, ${resourceId || null}, NOW())
+        `
+      } catch (e) {
+        console.error('[db-proxy] Audit log error:', e)
+      }
+    }
+
     let result: unknown = null
 
     switch (operation) {
@@ -76,6 +88,7 @@ serve(async (req: Request) => {
           SELECT * FROM personal_information WHERE user_id = ${userId}
         `
         result = res.rows[0] || null
+        await logAudit('read', 'personal_information')
         break
       }
 
@@ -84,6 +97,7 @@ serve(async (req: Request) => {
           SELECT * FROM military_service WHERE user_id = ${userId}
         `
         result = res.rows[0] || null
+        await logAudit('read', 'military_service')
         break
       }
 
@@ -92,6 +106,7 @@ serve(async (req: Request) => {
           SELECT * FROM va_disability_info WHERE user_id = ${userId}
         `
         result = res.rows[0] || null
+        await logAudit('read', 'va_disability_info')
         break
       }
 
@@ -368,6 +383,33 @@ serve(async (req: Request) => {
           DELETE FROM packet_status WHERE user_id = ${userId}
         `
         result = { success: true }
+        break
+      }
+
+      case 'create_audit_log': {
+        const d = data!
+        const res = await db.queryObject`
+          INSERT INTO audit_log (user_id, action, resource_type, resource_id, created_at)
+          VALUES (${userId}, ${d.action}, ${d.resource_type}, ${d.resource_id || null}, NOW())
+          RETURNING *
+        `
+        result = res.rows[0]
+        break
+      }
+
+      // ==================== Document Upload ====================
+      case 'upload_document': {
+        const d = data!
+        // Store the file data as a base64 string in the file_path column
+        // In production, this would upload to GCS and store the GCS path
+        const gcsPath = `gs://${Deno.env.get('GCS_BUCKET_NAME') || 'crsc-documents'}/uploads/${userId}/${d.document_type}/${d.file_name}`
+        const res = await db.queryObject`
+          INSERT INTO documents (user_id, document_type, file_name, file_path, file_size, mime_type, uploaded_at)
+          VALUES (${userId}, ${d.document_type || null}, ${d.file_name || null}, ${gcsPath}, ${d.file_size || null}, ${d.mime_type || null}, NOW())
+          RETURNING *
+        `
+        result = res.rows[0]
+        await logAudit('upload', 'documents', (res.rows[0] as Record<string, unknown>)?.id as string)
         break
       }
 

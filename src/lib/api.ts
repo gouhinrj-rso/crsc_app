@@ -168,6 +168,30 @@ export async function createDocument(
   return callDbProxy<Tables['documents']['Row']>('create_document', userId, doc as Record<string, unknown>)
 }
 
+// Upload document with file data to GCS via edge function
+export async function uploadDocument(
+  userId: string,
+  file: File,
+  documentType: string
+): Promise<ApiResponse<Tables['documents']['Row']>> {
+  const arrayBuffer = await file.arrayBuffer()
+  const uint8Array = new Uint8Array(arrayBuffer)
+  let binary = ''
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i])
+  }
+  const fileBase64 = btoa(binary)
+
+  return callEdgeFunction<Tables['documents']['Row']>('upload-document', {
+    userId,
+    documentType,
+    fileName: file.name,
+    fileSize: file.size,
+    mimeType: file.type,
+    fileBase64,
+  })
+}
+
 export async function deleteDocument(docId: string, userId?: string): Promise<ApiResponse<null>> {
   await callDbProxy<{ success: boolean }>('delete_document', userId || '', undefined, docId)
   return { data: null, error: null }
@@ -256,16 +280,19 @@ export async function createPayment(
   return { data, error: null }
 }
 
-// Audit Log API - handled by edge functions
+// Audit Log API
 export async function createAuditLog(
-  _userId: string | null,
-  _action: string,
-  _resourceType: string,
-  _resourceId?: string
+  userId: string | null,
+  action: string,
+  resourceType: string,
+  resourceId?: string
 ): Promise<ApiResponse<Tables['audit_log']['Row']>> {
-  // Audit logs are created by edge functions directly in Google Cloud PostgreSQL
-  // This is a no-op on the frontend
-  return { data: null, error: null }
+  if (!userId) return { data: null, error: null }
+  return callDbProxy<Tables['audit_log']['Row']>('create_audit_log', userId, {
+    action,
+    resource_type: resourceType,
+    resource_id: resourceId || null,
+  })
 }
 
 // Edge Function Calls

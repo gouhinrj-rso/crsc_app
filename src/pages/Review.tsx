@@ -29,6 +29,7 @@ import {
   VADisabilityForm,
   DisabilityClaimForm,
   DocumentUpload,
+  SecondaryConditionsForm,
 } from '@/components/forms'
 import {
   Shield,
@@ -44,8 +45,12 @@ import {
   Loader2,
   Trash2,
   Plus,
+  Eye,
+  Sparkles,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { generatePDF, sendChatMessage } from '@/lib/api'
 
 type EditSection = 'personal' | 'military' | 'va' | 'claim' | 'documents' | null
 
@@ -65,7 +70,7 @@ export default function Review() {
     addDisabilityClaim,
     editDisabilityClaim,
     removeDisabilityClaim,
-    addDocument,
+    uploadAndAddDocument,
     removeDocument,
     calculateProgress,
     isSectionComplete,
@@ -74,8 +79,58 @@ export default function Review() {
   const [editSection, setEditSection] = useState<EditSection>(null)
   const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [previewPdf, setPreviewPdf] = useState<string | null>(null)
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
+  const [aiReviewResult, setAiReviewResult] = useState<string | null>(null)
+  const [isRunningAiReview, setIsRunningAiReview] = useState(false)
 
   const progress = calculateProgress()
+
+  const handlePreviewDD2860 = async () => {
+    if (!user?.id) return
+    setIsGeneratingPreview(true)
+    const result = await generatePDF(user.id, 'dd2860')
+    setIsGeneratingPreview(false)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+    if (result.data?.pdf) {
+      setPreviewPdf(result.data.pdf)
+    }
+  }
+
+  const handleAiReview = async () => {
+    if (!user?.id) return
+    setIsRunningAiReview(true)
+    setAiReviewResult(null)
+
+    const reviewPrompt = `Please review the following CRSC application data for completeness and accuracy. Identify any issues, missing information, weak descriptions, or missing evidence. Provide specific, actionable suggestions.
+
+Personal Information: ${personalInfo ? `${personalInfo.first_name} ${personalInfo.last_name}, SSN: provided, DOB: ${personalInfo.date_of_birth}, Address: ${personalInfo.address_line1}, ${personalInfo.city}, ${personalInfo.state} ${personalInfo.zip_code}` : 'NOT PROVIDED'}
+
+Military Service: ${militaryService ? `${militaryService.branch}, Rank: ${militaryService.retired_rank}, Retirement: ${militaryService.retirement_date}, Type: ${militaryService.retirement_type}, Years: ${militaryService.years_of_service}` : 'NOT PROVIDED'}
+
+VA Disability: ${vaDisabilityInfo ? `File #: ${vaDisabilityInfo.va_file_number}, Combined Rating: ${vaDisabilityInfo.current_va_rating}%, Decision Date: ${vaDisabilityInfo.va_decision_date}` : 'NOT PROVIDED'}
+
+Disability Claims (${disabilityClaims.length} total):
+${disabilityClaims.map((c, i) => `${i + 1}. ${c.disability_title} (${c.combat_related_code}) - ${c.current_rating_percentage}% - Body: ${c.body_part_affected} - Location: ${c.location_of_injury} - Unit: ${c.unit_of_assignment} - Description: ${c.description_of_event?.substring(0, 200)}`).join('\n')}
+
+Documents uploaded: ${documents.length} (${documents.map(d => d.document_type).join(', ')})
+
+Please provide your review as a structured list with sections: Completeness Issues, Description Quality, Evidence Gaps, and Recommendations.`
+
+    const result = await sendChatMessage(user.id, reviewPrompt, [
+      { role: 'user', content: reviewPrompt }
+    ])
+    setIsRunningAiReview(false)
+
+    if (result.error) {
+      toast.error('AI review failed: ' + result.error)
+      return
+    }
+    setAiReviewResult(result.data?.reply || 'No review generated')
+  }
 
   const getBranchLabel = (value: string) =>
     MILITARY_BRANCHES.find((b) => b.value === value)?.label || value
@@ -195,13 +250,7 @@ export default function Review() {
   }
 
   const handleDocumentUpload = async (file: File, documentType: string) => {
-    const result = await addDocument({
-      document_type: documentType,
-      file_name: file.name,
-      file_size: file.size,
-      mime_type: file.type,
-      file_path: `uploads/${user?.id}/${documentType}/${file.name}`,
-    })
+    const result = await uploadAndAddDocument(file, documentType)
     return result
   }
 
@@ -532,59 +581,69 @@ export default function Review() {
                 {disabilityClaims.length > 0 ? (
                   <div className="space-y-4">
                     {disabilityClaims.map((claim) => (
-                      <Card key={claim.id} className="bg-muted/50">
-                        <CardContent className="pt-4">
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-2 flex-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-semibold">{claim.disability_title}</h4>
-                                <Badge>
-                                  {getCombatCodeLabel(claim.combat_related_code || '')}
-                                </Badge>
-                                {claim.received_purple_heart && (
-                                  <Badge variant="secondary">Purple Heart</Badge>
-                                )}
+                      <div key={claim.id} className="space-y-3">
+                        <Card className="bg-muted/50">
+                          <CardContent className="pt-4">
+                            <div className="flex justify-between items-start">
+                              <div className="space-y-2 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-semibold">{claim.disability_title}</h4>
+                                  <Badge>
+                                    {getCombatCodeLabel(claim.combat_related_code || '')}
+                                  </Badge>
+                                  {claim.received_purple_heart && (
+                                    <Badge variant="secondary">Purple Heart</Badge>
+                                  )}
+                                </div>
+                                <div className="grid sm:grid-cols-3 gap-4 text-sm">
+                                  <div>
+                                    <span className="text-muted-foreground">Body Part:</span>{' '}
+                                    {claim.body_part_affected}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Current Rating:</span>{' '}
+                                    {claim.current_rating_percentage}%
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Location:</span>{' '}
+                                    {claim.location_of_injury}
+                                  </div>
+                                </div>
+                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                  {claim.description_of_event}
+                                </p>
                               </div>
-                              <div className="grid sm:grid-cols-3 gap-4 text-sm">
-                                <div>
-                                  <span className="text-muted-foreground">Body Part:</span>{' '}
-                                  {claim.body_part_affected}
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">Current Rating:</span>{' '}
-                                  {claim.current_rating_percentage}%
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground">Location:</span>{' '}
-                                  {claim.location_of_injury}
-                                </div>
+                              <div className="flex gap-2 ml-4">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setEditingClaimId(claim.id)
+                                    setEditSection('claim')
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteClaim(claim.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
-                              <p className="text-sm text-muted-foreground line-clamp-2">
-                                {claim.description_of_event}
-                              </p>
                             </div>
-                            <div className="flex gap-2 ml-4">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setEditingClaimId(claim.id)
-                                  setEditSection('claim')
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteClaim(claim.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                          </CardContent>
+                        </Card>
+                        {claim.has_secondary_conditions && (
+                          <div className="ml-6">
+                            <SecondaryConditionsForm
+                              claimId={claim.id}
+                              claimTitle={claim.disability_title || 'Unnamed Claim'}
+                            />
                           </div>
-                        </CardContent>
-                      </Card>
+                        )}
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -612,6 +671,46 @@ export default function Review() {
             />
           </TabsContent>
         </Tabs>
+
+        {/* AI Review Result */}
+        {aiReviewResult && (
+          <Card className="mt-6 border-primary/20">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg">AI Review Results</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setAiReviewResult(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">
+                {aiReviewResult}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-3 mt-6">
+          <Button variant="outline" onClick={handlePreviewDD2860} disabled={isGeneratingPreview}>
+            {isGeneratingPreview ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Eye className="mr-2 h-4 w-4" />
+            )}
+            Preview DD Form 2860
+          </Button>
+          <Button variant="outline" onClick={handleAiReview} disabled={isRunningAiReview}>
+            {isRunningAiReview ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+            AI Review
+          </Button>
+        </div>
 
         {/* Navigation Buttons */}
         <Separator className="my-8" />
@@ -754,6 +853,25 @@ export default function Review() {
             isLoading={isSaving}
             isEditing={!!editingClaimId}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* DD Form 2860 Preview Dialog */}
+      <Dialog open={!!previewPdf} onOpenChange={() => setPreviewPdf(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>DD Form 2860 Preview</DialogTitle>
+            <DialogDescription>
+              Preview your completed DD Form 2860. This is a read-only preview.
+            </DialogDescription>
+          </DialogHeader>
+          {previewPdf && (
+            <iframe
+              src={`data:application/pdf;base64,${previewPdf}`}
+              className="w-full h-[70vh] border rounded"
+              title="DD Form 2860 Preview"
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

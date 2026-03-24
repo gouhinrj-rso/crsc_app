@@ -19,6 +19,10 @@ interface AuthContextValue {
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>
   clearError: () => void
   refreshVerificationStatus: () => Promise<void>
+  enrollMfa: () => Promise<{ success: boolean; error?: string; data?: { id: string; qrCode: string; secret: string; uri: string } }>
+  verifyMfa: (factorId: string, code: string) => Promise<{ success: boolean; error?: string }>
+  unenrollMfa: (factorId: string) => Promise<{ success: boolean; error?: string }>
+  listMfaFactors: () => Promise<{ success: boolean; error?: string; factors: Array<{ id: string; friendly_name?: string; factor_type: string; status: string }> }>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
