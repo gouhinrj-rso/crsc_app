@@ -19,6 +19,10 @@ export type Database = {
           profile_completed: boolean
           packet_status: string
           is_admin: boolean
+          veteran_verified: boolean
+          veteran_verified_at: string | null
+          idme_uuid: string | null
+          military_status: string | null
         }
         Insert: {
           id?: string
@@ -29,6 +33,10 @@ export type Database = {
           profile_completed?: boolean
           packet_status?: string
           is_admin?: boolean
+          veteran_verified?: boolean
+          veteran_verified_at?: string | null
+          idme_uuid?: string | null
+          military_status?: string | null
         }
         Update: {
           id?: string
@@ -39,6 +47,10 @@ export type Database = {
           profile_completed?: boolean
           packet_status?: string
           is_admin?: boolean
+          veteran_verified?: boolean
+          veteran_verified_at?: string | null
+          idme_uuid?: string | null
+          military_status?: string | null
         }
         Relationships: []
       }
@@ -468,6 +480,7 @@ export type Database = {
           resource_id: string | null
           ip_address: string | null
           user_agent: string | null
+          details: Json | null
           created_at: string
         }
         Insert: {
@@ -478,6 +491,7 @@ export type Database = {
           resource_id?: string | null
           ip_address?: string | null
           user_agent?: string | null
+          details?: Json | null
           created_at?: string
         }
         Update: {
@@ -488,11 +502,58 @@ export type Database = {
           resource_id?: string | null
           ip_address?: string | null
           user_agent?: string | null
+          details?: Json | null
           created_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "audit_log_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      verification_log: {
+        Row: {
+          id: string
+          user_id: string
+          provider: string
+          status: string
+          military_status: string | null
+          idme_uuid: string | null
+          error_message: string | null
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          provider?: string
+          status: string
+          military_status?: string | null
+          idme_uuid?: string | null
+          error_message?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          provider?: string
+          status?: string
+          military_status?: string | null
+          idme_uuid?: string | null
+          error_message?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_log_user_id_fkey"
             columns: ["user_id"]
             referencedRelation: "users"
             referencedColumns: ["id"]
