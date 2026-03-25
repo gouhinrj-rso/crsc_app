@@ -4,6 +4,7 @@ import { initDb, closeDb } from './db/database'
 import { runMigrations } from './db/migrations'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerFormDataHandlers } from './ipc/formData'
+import { registerChatHandlers } from './ipc/chat'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -28,6 +29,7 @@ app.whenReady().then(() => {
   runMigrations()
   registerSettingsHandlers()
   registerFormDataHandlers()
+  registerChatHandlers()
   createWindow()
 
   app.on('activate', () => {

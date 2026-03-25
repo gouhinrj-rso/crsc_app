@@ -27,4 +27,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updatePacketStep: (stepName: string, status: string) => ipcRenderer.invoke('form:updatePacketStep', stepName, status),
     resetPacketStatus: () => ipcRenderer.invoke('form:resetPacketStatus'),
   },
+  chat: {
+    send: (message: string, history: Array<{ role: string; content: string }>) =>
+      ipcRenderer.invoke('chat:send', message, history),
+    onStreamChunk: (callback: (text: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, text: string) => callback(text)
+      ipcRenderer.on('chat:stream-chunk', handler)
+      return () => ipcRenderer.removeListener('chat:stream-chunk', handler)
+    },
+    history: () => ipcRenderer.invoke('chat:history'),
+    clear: () => ipcRenderer.invoke('chat:clear'),
+  },
 })

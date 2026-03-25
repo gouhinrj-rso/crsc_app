@@ -195,7 +195,7 @@ export default function Chat() {
     clearError,
     messagesEndRef,
     historyLoaded,
-  } = useChat(LOCAL_USER_ID)
+  } = useChat()
   const { calculateProgress, packetStatus, resetProgress, loadAllData } = useFormData(LOCAL_USER_ID)
 
   const [inputValue, setInputValue] = useState('')

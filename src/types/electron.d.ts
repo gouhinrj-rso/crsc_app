@@ -35,6 +35,17 @@ interface ElectronAPI {
     updatePacketStep: (stepName: string, status: string) => Promise<PacketStatus>
     resetPacketStatus: () => Promise<void>
   }
+  chat: {
+    send: (
+      message: string,
+      history: Array<{ role: string; content: string }>
+    ) => Promise<{ success: boolean; error?: string }>
+    onStreamChunk: (callback: (text: string) => void) => () => void
+    history: () => Promise<
+      Array<{ id: string; message: string; role: string; created_at: string }>
+    >
+    clear: () => Promise<void>
+  }
 }
 
 declare global {

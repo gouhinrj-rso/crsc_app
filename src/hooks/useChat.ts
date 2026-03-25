@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { sendChatMessageStream, getChatHistory, clearChatHistory } from '@/lib/api'
 
 export interface Message {
   id: string
@@ -19,10 +18,10 @@ interface ChatState {
   isLoading: boolean
   error: string | null
   historyLoaded: boolean
-  streamingMessageId: string | null // Track the currently streaming message
+  streamingMessageId: string | null
 }
 
-export function useChat(userId: string | undefined) {
+export function useChat() {
   const [state, setState] = useState<ChatState>({
     messages: [],
     currentStep: 'eligibility',
@@ -36,31 +35,28 @@ export function useChat(userId: string | undefined) {
 
   // Load chat history on mount
   useEffect(() => {
-    if (!userId) return
-
     const loadHistory = async () => {
-      console.log('[useChat] Loading chat history for user:', userId)
-      const result = await getChatHistory(userId)
-      console.log('[useChat] Chat history result:', result)
-      if (result.error) {
-        console.error('[useChat] Error loading chat history:', result.error)
-      }
-      if (result.data && result.data.length > 0) {
-        const messages: Message[] = result.data.map((m) => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          content: m.message,
-          timestamp: new Date(m.created_at),
-        }))
-        setState((prev) => ({ ...prev, messages, historyLoaded: true }))
-      } else {
-        // No history found, but still mark as loaded
+      try {
+        const data = await window.electronAPI.chat.history()
+        if (data && data.length > 0) {
+          const messages: Message[] = data.map((m) => ({
+            id: m.id,
+            role: m.role as 'user' | 'assistant',
+            content: m.message,
+            timestamp: new Date(m.created_at),
+          }))
+          setState((prev) => ({ ...prev, messages, historyLoaded: true }))
+        } else {
+          setState((prev) => ({ ...prev, historyLoaded: true }))
+        }
+      } catch (err) {
+        console.error('[useChat] Error loading chat history:', err)
         setState((prev) => ({ ...prev, historyLoaded: true }))
       }
     }
 
     loadHistory()
-  }, [userId])
+  }, [])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -69,12 +65,11 @@ export function useChat(userId: string | undefined) {
 
   const sendMessage = useCallback(
     async (content: string, options?: { hidden?: boolean; displayContent?: string }) => {
-      if (!userId || !content.trim()) return
+      if (!content.trim()) return
 
       const isHidden = options?.hidden ?? false
       const displayContent = options?.displayContent
 
-      console.log('[useChat] Sending message:', isHidden ? '[HIDDEN]' : content)
       setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
       // Add user message to state (unless hidden)
@@ -115,42 +110,22 @@ export function useChat(userId: string | undefined) {
         streamingMessageId,
       }))
 
-      // Send to AI with streaming
-      console.log('[useChat] Calling sendChatMessageStream API...')
+      // Set up stream listener BEFORE calling send
+      const removeListener = window.electronAPI.chat.onStreamChunk((text) => {
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.map((msg) =>
+            msg.id === streamingMessageId ? { ...msg, content: msg.content + text } : msg
+          ),
+        }))
+      })
 
-      await sendChatMessageStream(
-        userId,
-        content,
-        conversationHistory,
-        // onChunk - called for each text chunk
-        (text: string) => {
+      try {
+        const result = await window.electronAPI.chat.send(content, conversationHistory)
+        if (!result.success) {
           setState((prev) => ({
             ...prev,
-            messages: prev.messages.map((msg) =>
-              msg.id === streamingMessageId
-                ? { ...msg, content: msg.content + text }
-                : msg
-            ),
-          }))
-        },
-        // onComplete - called when streaming is done
-        () => {
-          console.log('[useChat] Streaming complete')
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            streamingMessageId: null,
-          }))
-        },
-        // onError - called on error
-        (error: string) => {
-          console.error('[useChat] Streaming error:', error)
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            streamingMessageId: null,
-            error: error,
-            // Update the message to show an error if it was empty
+            error: result.error || 'Unknown error',
             messages: prev.messages.map((msg) =>
               msg.id === streamingMessageId && !msg.content
                 ? { ...msg, content: 'I apologize, but I encountered an issue. Please try again.' }
@@ -158,9 +133,23 @@ export function useChat(userId: string | undefined) {
             ),
           }))
         }
-      )
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        setState((prev) => ({
+          ...prev,
+          error: errorMsg,
+          messages: prev.messages.map((msg) =>
+            msg.id === streamingMessageId && !msg.content
+              ? { ...msg, content: 'I apologize, but I encountered an issue. Please try again.' }
+              : msg
+          ),
+        }))
+      } finally {
+        removeListener()
+        setState((prev) => ({ ...prev, isLoading: false, streamingMessageId: null }))
+      }
     },
-    [userId, state.messages]
+    [state.messages]
   )
 
   const addSystemMessage = useCallback((content: string, metadata?: Message['metadata']) => {
@@ -183,11 +172,9 @@ export function useChat(userId: string | undefined) {
   }, [])
 
   const clearMessages = useCallback(async () => {
-    if (!userId) return
-
-    await clearChatHistory(userId)
+    await window.electronAPI.chat.clear()
     setState((prev) => ({ ...prev, messages: [] }))
-  }, [userId])
+  }, [])
 
   const clearError = useCallback(() => {
     setState((prev) => ({ ...prev, error: null }))
