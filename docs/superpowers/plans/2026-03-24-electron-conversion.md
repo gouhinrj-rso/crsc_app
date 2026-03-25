@@ -36,7 +36,7 @@
 
 | File | Responsibility |
 |------|---------------|
-| `src/lib/ipc.ts` | Renderer-side IPC client (replaces api.ts + supabase.ts) |
+| ~~`src/lib/ipc.ts`~~ | Not needed — hooks call `window.electronAPI.*` directly via the preload bridge |
 | `src/pages/Settings.tsx` | API key input, storage path config |
 | `src/types/electron.d.ts` | TypeScript declarations for `window.electronAPI` |
 
@@ -554,7 +554,7 @@ Message: `feat: add Electron Builder packaging config`
 
 ---
 
-## Task 13: Cleanup and Final Verification
+## Task 12: Cleanup and Final Verification
 
 - [ ] **Step 1: Delete the supabase/ directory**
 
