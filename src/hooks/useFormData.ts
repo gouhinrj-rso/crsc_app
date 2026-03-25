@@ -1,39 +1,25 @@
 import { useState, useEffect, useCallback } from 'react'
-import {
-  getPersonalInfo,
-  upsertPersonalInfo,
-  getMilitaryService,
-  upsertMilitaryService,
-  getVADisabilityInfo,
-  upsertVADisabilityInfo,
-  getDisabilityClaims,
-  createDisabilityClaim,
-  updateDisabilityClaim,
-  deleteDisabilityClaim,
-  getDocuments,
-  createDocument,
-  uploadDocument,
-  deleteDocument,
-  getPacketStatus,
-  updatePacketStep,
-  resetPacketStatus,
-} from '@/lib/api'
-import type { Database } from '@/types/database'
-
-type Tables = Database['public']['Tables']
+import type {
+  PersonalInformation,
+  MilitaryService,
+  VaDisabilityInfo,
+  DisabilityClaim,
+  Document,
+  PacketStatus,
+} from '@/types/database'
 
 interface FormDataState {
-  personalInfo: Tables['personal_information']['Row'] | null
-  militaryService: Tables['military_service']['Row'] | null
-  vaDisabilityInfo: Tables['va_disability_info']['Row'] | null
-  disabilityClaims: Tables['disability_claims']['Row'][]
-  documents: Tables['documents']['Row'][]
-  packetStatus: Tables['packet_status']['Row'][]
+  personalInfo: PersonalInformation | null
+  militaryService: MilitaryService | null
+  vaDisabilityInfo: VaDisabilityInfo | null
+  disabilityClaims: DisabilityClaim[]
+  documents: Document[]
+  packetStatus: PacketStatus[]
   loading: boolean
   error: string | null
 }
 
-export function useFormData(userId: string | undefined) {
+export function useFormData() {
   const [state, setState] = useState<FormDataState>({
     personalInfo: null,
     militaryService: null,
@@ -46,37 +32,32 @@ export function useFormData(userId: string | undefined) {
   })
 
   const loadAllData = useCallback(async () => {
-    if (!userId) {
-      setState((prev) => ({ ...prev, loading: false }))
-      return
-    }
-
     setState((prev) => ({ ...prev, loading: true, error: null }))
 
     try {
       const [
-        personalInfoResult,
-        militaryServiceResult,
-        vaDisabilityResult,
-        claimsResult,
-        documentsResult,
-        statusResult,
+        personalInfo,
+        militaryService,
+        vaDisabilityInfo,
+        disabilityClaims,
+        documents,
+        packetStatus,
       ] = await Promise.all([
-        getPersonalInfo(userId),
-        getMilitaryService(userId),
-        getVADisabilityInfo(userId),
-        getDisabilityClaims(userId),
-        getDocuments(userId),
-        getPacketStatus(userId),
+        window.electronAPI.formData.getPersonalInfo(),
+        window.electronAPI.formData.getMilitaryService(),
+        window.electronAPI.formData.getVaDisabilityInfo(),
+        window.electronAPI.formData.getDisabilityClaims(),
+        window.electronAPI.formData.getDocuments(),
+        window.electronAPI.formData.getPacketStatus(),
       ])
 
       setState({
-        personalInfo: personalInfoResult.data,
-        militaryService: militaryServiceResult.data,
-        vaDisabilityInfo: vaDisabilityResult.data,
-        disabilityClaims: claimsResult.data || [],
-        documents: documentsResult.data || [],
-        packetStatus: statusResult.data || [],
+        personalInfo,
+        militaryService,
+        vaDisabilityInfo,
+        disabilityClaims: disabilityClaims || [],
+        documents: documents || [],
+        packetStatus: packetStatus || [],
         loading: false,
         error: null,
       })
@@ -87,7 +68,7 @@ export function useFormData(userId: string | undefined) {
         error: err instanceof Error ? err.message : 'Failed to load data',
       }))
     }
-  }, [userId])
+  }, [])
 
   useEffect(() => {
     loadAllData()
@@ -95,191 +76,167 @@ export function useFormData(userId: string | undefined) {
 
   // Personal Info
   const savePersonalInfo = useCallback(
-    async (data: Omit<Tables['personal_information']['Insert'], 'user_id'>) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await upsertPersonalInfo(userId, data)
-      if (result.error) {
-        return { success: false, error: result.error }
+    async (data: Partial<PersonalInformation>) => {
+      try {
+        const result = await window.electronAPI.formData.savePersonalInfo(data)
+        setState((prev) => ({ ...prev, personalInfo: result }))
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to save personal info'
+        return { success: false, error }
       }
-
-      setState((prev) => ({ ...prev, personalInfo: result.data }))
-      return { success: true, data: result.data }
     },
-    [userId]
+    []
   )
 
   // Military Service
   const saveMilitaryService = useCallback(
-    async (data: Omit<Tables['military_service']['Insert'], 'user_id'>) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await upsertMilitaryService(userId, data)
-      if (result.error) {
-        return { success: false, error: result.error }
+    async (data: Partial<MilitaryService>) => {
+      try {
+        const result = await window.electronAPI.formData.saveMilitaryService(data)
+        setState((prev) => ({ ...prev, militaryService: result }))
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to save military service'
+        return { success: false, error }
       }
-
-      setState((prev) => ({ ...prev, militaryService: result.data }))
-      return { success: true, data: result.data }
     },
-    [userId]
+    []
   )
 
   // VA Disability Info
   const saveVADisabilityInfo = useCallback(
-    async (data: Omit<Tables['va_disability_info']['Insert'], 'user_id'>) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await upsertVADisabilityInfo(userId, data)
-      if (result.error) {
-        return { success: false, error: result.error }
+    async (data: Partial<VaDisabilityInfo>) => {
+      try {
+        const result = await window.electronAPI.formData.saveVaDisabilityInfo(data)
+        setState((prev) => ({ ...prev, vaDisabilityInfo: result }))
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to save VA disability info'
+        return { success: false, error }
       }
-
-      setState((prev) => ({ ...prev, vaDisabilityInfo: result.data }))
-      return { success: true, data: result.data }
     },
-    [userId]
+    []
   )
 
   // Disability Claims
   const addDisabilityClaim = useCallback(
-    async (data: Omit<Tables['disability_claims']['Insert'], 'user_id'>) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await createDisabilityClaim(userId, data)
-      if (result.error) {
-        return { success: false, error: result.error }
+    async (data: Partial<DisabilityClaim>) => {
+      try {
+        const result = await window.electronAPI.formData.createDisabilityClaim(data)
+        setState((prev) => ({
+          ...prev,
+          disabilityClaims: [...prev.disabilityClaims, result],
+        }))
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to add disability claim'
+        return { success: false, error }
       }
-
-      setState((prev) => ({
-        ...prev,
-        disabilityClaims: [...prev.disabilityClaims, result.data!],
-      }))
-      return { success: true, data: result.data }
     },
-    [userId]
+    []
   )
 
   const editDisabilityClaim = useCallback(
-    async (claimId: string, data: Tables['disability_claims']['Update']) => {
-      const result = await updateDisabilityClaim(claimId, data)
-      if (result.error) {
-        return { success: false, error: result.error }
+    async (claimId: string, data: Partial<DisabilityClaim>) => {
+      try {
+        const result = await window.electronAPI.formData.updateDisabilityClaim(claimId, data)
+        setState((prev) => ({
+          ...prev,
+          disabilityClaims: prev.disabilityClaims.map((claim) =>
+            claim.id === claimId ? result : claim
+          ),
+        }))
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to update disability claim'
+        return { success: false, error }
       }
-
-      setState((prev) => ({
-        ...prev,
-        disabilityClaims: prev.disabilityClaims.map((claim) =>
-          claim.id === claimId ? result.data! : claim
-        ),
-      }))
-      return { success: true, data: result.data }
     },
     []
   )
 
   const removeDisabilityClaim = useCallback(async (claimId: string) => {
-    const result = await deleteDisabilityClaim(claimId)
-    if (result.error) {
-      return { success: false, error: result.error }
+    try {
+      await window.electronAPI.formData.deleteDisabilityClaim(claimId)
+      setState((prev) => ({
+        ...prev,
+        disabilityClaims: prev.disabilityClaims.filter((claim) => claim.id !== claimId),
+      }))
+      return { success: true }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Failed to delete disability claim'
+      return { success: false, error }
     }
-
-    setState((prev) => ({
-      ...prev,
-      disabilityClaims: prev.disabilityClaims.filter((claim) => claim.id !== claimId),
-    }))
-    return { success: true }
   }, [])
 
   // Documents
   const addDocument = useCallback(
-    async (data: Omit<Tables['documents']['Insert'], 'user_id'>) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await createDocument(userId, data)
-      if (result.error) {
-        return { success: false, error: result.error }
+    async (data: Partial<Document>) => {
+      try {
+        const result = await window.electronAPI.formData.createDocument(data)
+        setState((prev) => ({
+          ...prev,
+          documents: [result, ...prev.documents],
+        }))
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to add document'
+        return { success: false, error }
       }
-
-      setState((prev) => ({
-        ...prev,
-        documents: [result.data!, ...prev.documents],
-      }))
-      return { success: true, data: result.data }
     },
-    [userId]
-  )
-
-  // Upload document with file data to GCS
-  const uploadAndAddDocument = useCallback(
-    async (file: File, documentType: string) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await uploadDocument(userId, file, documentType)
-      if (result.error) {
-        return { success: false, error: result.error }
-      }
-
-      setState((prev) => ({
-        ...prev,
-        documents: [result.data!, ...prev.documents],
-      }))
-      return { success: true, data: result.data }
-    },
-    [userId]
+    []
   )
 
   const removeDocument = useCallback(async (docId: string) => {
-    const result = await deleteDocument(docId)
-    if (result.error) {
-      return { success: false, error: result.error }
+    try {
+      await window.electronAPI.formData.deleteDocument(docId)
+      setState((prev) => ({
+        ...prev,
+        documents: prev.documents.filter((doc) => doc.id !== docId),
+      }))
+      return { success: true }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Failed to delete document'
+      return { success: false, error }
     }
-
-    setState((prev) => ({
-      ...prev,
-      documents: prev.documents.filter((doc) => doc.id !== docId),
-    }))
-    return { success: true }
   }, [])
 
   // Packet Status
   const setStepStatus = useCallback(
     async (stepName: string, status: string) => {
-      if (!userId) return { success: false, error: 'Not authenticated' }
-
-      const result = await updatePacketStep(userId, stepName, status)
-      if (result.error) {
-        return { success: false, error: result.error }
+      try {
+        const result = await window.electronAPI.formData.updatePacketStep(stepName, status)
+        setState((prev) => {
+          const existingIndex = prev.packetStatus.findIndex(
+            (s) => s.step_name === stepName
+          )
+          if (existingIndex >= 0) {
+            const newStatus = [...prev.packetStatus]
+            newStatus[existingIndex] = result
+            return { ...prev, packetStatus: newStatus }
+          }
+          return { ...prev, packetStatus: [...prev.packetStatus, result] }
+        })
+        return { success: true, data: result }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Failed to update packet step'
+        return { success: false, error }
       }
-
-      setState((prev) => {
-        const existingIndex = prev.packetStatus.findIndex(
-          (s) => s.step_name === stepName
-        )
-        if (existingIndex >= 0) {
-          const newStatus = [...prev.packetStatus]
-          newStatus[existingIndex] = result.data!
-          return { ...prev, packetStatus: newStatus }
-        }
-        return { ...prev, packetStatus: [...prev.packetStatus, result.data!] }
-      })
-      return { success: true, data: result.data }
     },
-    [userId]
+    []
   )
 
-  // Reset all progress (packet status)
   const resetProgress = useCallback(async () => {
-    if (!userId) return { success: false, error: 'Not authenticated' }
-
-    const result = await resetPacketStatus(userId)
-    if (result.error) {
-      return { success: false, error: result.error }
+    try {
+      await window.electronAPI.formData.resetPacketStatus()
+      setState((prev) => ({ ...prev, packetStatus: [] }))
+      return { success: true }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Failed to reset progress'
+      return { success: false, error }
     }
-
-    setState((prev) => ({ ...prev, packetStatus: [] }))
-    return { success: true }
-  }, [userId])
+  }, [])
 
   // Calculate progress
   const calculateProgress = useCallback(() => {
@@ -291,7 +248,6 @@ export function useFormData(userId: string | undefined) {
       'disability_claims',
       'documents',
       'review',
-      'payment',
     ]
 
     const completedSteps = state.packetStatus.filter(
@@ -348,7 +304,6 @@ export function useFormData(userId: string | undefined) {
     editDisabilityClaim,
     removeDisabilityClaim,
     addDocument,
-    uploadAndAddDocument,
     removeDocument,
     setStepStatus,
     resetProgress,

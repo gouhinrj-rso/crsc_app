@@ -3,6 +3,7 @@ import path from 'path'
 import { initDb, closeDb } from './db/database'
 import { runMigrations } from './db/migrations'
 import { registerSettingsHandlers } from './ipc/settings'
+import { registerFormDataHandlers } from './ipc/formData'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -26,6 +27,7 @@ app.whenReady().then(() => {
   initDb()
   runMigrations()
   registerSettingsHandlers()
+  registerFormDataHandlers()
   createWindow()
 
   app.on('activate', () => {
