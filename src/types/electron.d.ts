@@ -57,6 +57,11 @@ interface ElectronAPI {
     delete: (docId: string) => Promise<void>
     extract: (fileBase64: string, mimeType: string) => Promise<string>
   }
+  pdf: {
+    generate: () => Promise<string>
+    preview: () => Promise<string>
+    openFolder: (path: string) => Promise<void>
+  }
 }
 
 declare global {

@@ -46,4 +46,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     extract: (fileBase64: string, mimeType: string) =>
       ipcRenderer.invoke('documents:extract', fileBase64, mimeType),
   },
+  pdf: {
+    generate: () => ipcRenderer.invoke('pdf:generate'),
+    preview: () => ipcRenderer.invoke('pdf:preview'),
+    openFolder: (path: string) => ipcRenderer.invoke('pdf:openFolder', path),
+  },
 })

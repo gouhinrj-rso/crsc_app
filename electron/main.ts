@@ -6,6 +6,7 @@ import { registerSettingsHandlers } from './ipc/settings'
 import { registerFormDataHandlers } from './ipc/formData'
 import { registerChatHandlers } from './ipc/chat'
 import { registerDocumentHandlers } from './ipc/documents'
+import { registerPdfHandlers } from './ipc/pdf'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -32,6 +33,7 @@ app.whenReady().then(() => {
   registerFormDataHandlers()
   registerChatHandlers()
   registerDocumentHandlers()
+  registerPdfHandlers()
   createWindow()
 
   app.on('activate', () => {
