@@ -42,32 +42,10 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { APPLICATION_STEPS } from '@/lib/constants'
-import ChatDropzone, { type DocumentType, type ExtractedDocumentData } from '@/components/chat/ChatDropzone'
+import { parseMessageContent, hasUploadRequest, type ChatDocumentType } from '@/lib/chat-utils'
+import ChatDropzone, { type ExtractedDocumentData } from '@/components/chat/ChatDropzone'
 
-// Regex to detect upload request markers in assistant messages
-const UPLOAD_REQUEST_REGEX = /\[UPLOAD_REQUEST:(va_decision_letter|dd214|medical_records)\]/g
-
-// Parse message content to extract upload requests and clean content
-function parseMessageContent(content: string): {
-  cleanContent: string
-  uploadRequests: DocumentType[]
-} {
-  const uploadRequests: DocumentType[] = []
-  let match
-
-  // Find all upload request markers
-  while ((match = UPLOAD_REQUEST_REGEX.exec(content)) !== null) {
-    uploadRequests.push(match[1] as DocumentType)
-  }
-
-  // Reset regex lastIndex for next use
-  UPLOAD_REQUEST_REGEX.lastIndex = 0
-
-  // Remove markers from content
-  const cleanContent = content.replace(UPLOAD_REQUEST_REGEX, '').trim()
-
-  return { cleanContent, uploadRequests }
-}
+type DocumentType = ChatDocumentType
 
 interface MessageBubbleProps {
   message: Message
@@ -434,11 +412,9 @@ export default function Chat() {
             {messages.map((message) => {
               // Find the most recent assistant message with an upload request that hasn't been completed
               const lastUploadRequestIndex = [...messages].reverse().findIndex(
-                (m) => m.role === 'assistant' && UPLOAD_REQUEST_REGEX.test(m.content) &&
+                (m) => m.role === 'assistant' && hasUploadRequest(m.content) &&
                   !Array.from(completedUploads).some(id => id.startsWith(`${m.id}-`))
               )
-              // Reset regex lastIndex
-              UPLOAD_REQUEST_REGEX.lastIndex = 0
               const showDropzoneForThisMessage = lastUploadRequestIndex !== -1 &&
                 messages[messages.length - 1 - lastUploadRequestIndex]?.id === message.id
 
