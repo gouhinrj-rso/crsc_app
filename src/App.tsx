@@ -9,6 +9,7 @@ import Chat from '@/pages/Chat'
 import Review from '@/pages/Review'
 import Download from '@/pages/Download'
 import StatusTracking from '@/pages/StatusTracking'
+import Settings from '@/pages/Settings'
 
 function AppRoutes() {
   return (
@@ -20,7 +21,7 @@ function AppRoutes() {
       <Route path="/review" element={<Review />} />
       <Route path="/download" element={<Download />} />
       <Route path="/status" element={<StatusTracking />} />
-      {/* Settings page created in Task 5 */}
+      <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

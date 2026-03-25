@@ -1,5 +1,9 @@
 interface ElectronAPI {
-  // Will be populated as IPC methods are added
+  settings: {
+    get: (key: string) => Promise<string | null>
+    set: (key: string, value: string) => Promise<void>
+    getAll: () => Promise<Record<string, string>>
+  }
 }
 
 declare global {

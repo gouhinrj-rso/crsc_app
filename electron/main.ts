@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import { initDb, closeDb } from './db/database'
 import { runMigrations } from './db/migrations'
+import { registerSettingsHandlers } from './ipc/settings'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -24,6 +25,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   initDb()
   runMigrations()
+  registerSettingsHandlers()
   createWindow()
 
   app.on('activate', () => {
