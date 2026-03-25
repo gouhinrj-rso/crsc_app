@@ -87,8 +87,10 @@
 - [ ] **Step 1: Install electron-vite and Electron dependencies**
 
 Run: `npm install --save-dev electron electron-vite @electron/rebuild`
-Run: `npm install --save better-sqlite3`
+Run: `npm install --save better-sqlite3 pdf-lib`
 Run: `npm install --save-dev @types/better-sqlite3`
+
+Note: `pdf-lib` must be in `dependencies` (not `devDependencies`) because the Electron main process uses it at runtime for PDF generation. It's currently in devDeps — this step moves it.
 
 - [ ] **Step 2: Update package.json**
 
@@ -103,8 +105,8 @@ Set `"main": "dist-electron/main.js"` and update scripts:
 - [ ] **Step 3: Create electron.vite.config.ts**
 
 Configure three build targets:
-- `main`: externalize deps, output to `dist-electron/`, external `better-sqlite3`
-- `preload`: externalize deps, output to `dist-electron/`
+- `main`: externalize deps, output to `dist-electron/`, external `better-sqlite3`. **No `@` alias** — electron code must not import from `src/`. If shared types are needed between electron and renderer, create a `shared/types/` directory at the project root.
+- `preload`: externalize deps, output to `dist-electron/`. **No `@` alias** — same reason.
 - `renderer`: use react + tailwindcss plugins, resolve `@` alias to `./src`, output to `dist/`
 
 - [ ] **Step 4: Create electron/main.ts — minimal window**
@@ -112,7 +114,7 @@ Configure three build targets:
 Create a BrowserWindow (1200x800) with:
 - `contextIsolation: true`, `nodeIntegration: false`
 - Preload script: `path.join(__dirname, 'preload.js')`
-- In dev: load `http://localhost:5173`
+- In dev: load the dev server URL from `electron-vite` (typically `http://localhost:5173` but use the `ELECTRON_RENDERER_URL` env var or `electron-vite`'s provided URL rather than hardcoding)
 - In prod: load `path.join(__dirname, '../dist/index.html')`
 - Handle `window-all-closed` (quit on non-darwin)
 - Handle `activate` (recreate window on macOS dock click)
@@ -152,7 +154,9 @@ Delete all files listed under "Deleted Files" in the File Map above.
 
 - [ ] **Step 2: Remove cloud dependencies**
 
-Run: `npm uninstall @supabase/supabase-js @stripe/react-stripe-js @stripe/stripe-js`
+Run: `npm uninstall @supabase/supabase-js @stripe/react-stripe-js @stripe/stripe-js next-themes uuid @types/uuid`
+
+Note: `uuid` is replaced by `crypto.randomUUID()` (per spec). `next-themes` is Next.js-specific and unused in Electron.
 
 - [ ] **Step 3: Update src/hooks/index.ts**
 
@@ -168,7 +172,10 @@ Remove all auth imports, `AuthProvider`, `DevModeProvider`, `SessionTimeoutWrapp
 - `/review` → Review
 - `/download` → Download
 - `/status` → StatusTracking
+- `/settings` → placeholder (Settings page created in Task 5, add comment: `{/* Settings page added in Task 5 */}`)
 - `*` → Navigate to `/`
+
+Note: `supabase/` directory is intentionally kept as reference during Tasks 5-9 (porting edge function logic). It will be deleted in Task 13 (Cleanup).
 
 - [ ] **Step 5: Verify compile**
 
@@ -233,7 +240,29 @@ Message: `feat: add SQLite database layer with migrations`
 
 ---
 
-## Task 4: Settings IPC + Settings Page
+## Task 4: Update TypeScript Types for SQLite
+
+**Files:**
+- Modify: `src/types/database.ts`
+
+This task must come before IPC handlers so the types match the SQLite schema from the start.
+
+- [ ] **Step 1: Rewrite database.ts**
+
+Remove `users`, `payments`, `audit_log` types. Remove `user_id` from all table Row/Insert/Update types. Change `boolean` fields to `number` (SQLite uses 0/1). Remove ID.me-related fields (`idme_uuid`, `military_status`, `veteran_verified`, etc.).
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit`
+Note: Some pages will have type errors from removed auth/payment code — that's expected and will be fixed in Task 10.
+
+- [ ] **Step 3: Commit**
+
+Message: `feat: update TypeScript types for SQLite single-user schema`
+
+---
+
+## Task 5: Settings IPC + Settings Page
 
 **Files:**
 - Create: `electron/ipc/settings.ts`
@@ -271,7 +300,7 @@ Message: `feat: add Settings page with API key and storage path config`
 
 ---
 
-## Task 5: Form Data IPC Layer + Rewrite useFormData
+## Task 6: Form Data IPC Layer + Rewrite useFormData
 
 **Files:**
 - Create: `electron/ipc/formData.ts`
@@ -290,6 +319,11 @@ Largest IPC module. Handles CRUD for all data tables:
 - `packet_status`: get all, update step, reset all
 
 Use `crypto.randomUUID()` for new IDs. Use named parameters with `@param` syntax.
+
+**SSN Encryption:** For the `personal_information` handler, use Electron's `safeStorage` API:
+- On save: if `ssn_encrypted` field is present, call `safeStorage.encryptString(ssn)` and store the base64-encoded result
+- On read: if `ssn_encrypted` is present, call `safeStorage.decryptString(Buffer.from(value, 'base64'))` before returning
+- Check `safeStorage.isEncryptionAvailable()` on app startup; if unavailable, warn the user that SSN data won't be encrypted at rest
 
 - [ ] **Step 2: Update preload.ts and electron.d.ts with form data methods**
 
@@ -312,7 +346,7 @@ Message: `feat: add form data IPC layer and rewrite useFormData hook`
 
 ---
 
-## Task 6: Chat IPC Layer + Rewrite useChat
+## Task 7: Chat IPC Layer + Rewrite useChat
 
 **Files:**
 - Create: `electron/services/claude.ts`
@@ -349,7 +383,8 @@ Add `chat.send()`, `chat.onStreamChunk()` (returns cleanup function), `chat.hist
 Key changes:
 - Remove `userId` parameter
 - Replace `sendChatMessageStream` with IPC send + stream listener
-- Set up stream listener before calling `chat:send`, clean up in `.finally()`
+- Set up stream listener before calling `chat:send`
+- **Critical:** call the cleanup function returned by `onStreamChunk()` in the `invoke` promise's `.finally()` handler to prevent memory leaks. Pattern: `const removeListener = window.electronAPI.chat.onStreamChunk(callback); try { await window.electronAPI.chat.send(...); } finally { removeListener(); }`
 - Replace `getChatHistory`/`clearChatHistory` with IPC
 
 - [ ] **Step 7: Test — go to /chat, send a message, verify streaming response**
@@ -362,7 +397,7 @@ Message: `feat: add chat IPC with Claude API streaming`
 
 ---
 
-## Task 7: Document Upload IPC + Storage Service
+## Task 8: Document Upload IPC + Storage Service
 
 **Files:**
 - Create: `electron/services/storage.ts`
@@ -383,6 +418,7 @@ Handlers:
 - `documents:upload` (fileBase64, fileName, mimeType, documentType): decode base64, save to storage, insert DB row
 - `documents:list`: return all document rows
 - `documents:delete` (docId): delete file from storage + delete DB row
+- `documents:extract` (fileBase64, mimeType, documentType): send to Claude Vision API as base64, return extracted text. Port from `supabase/functions/extract-document/index.ts`. Uses the same Anthropic SDK client as the chat service.
 
 - [ ] **Step 3: Update preload.ts, types, main.ts**
 
@@ -394,23 +430,33 @@ Message: `feat: add document upload/storage IPC layer`
 
 ---
 
-## Task 8: PDF Generation + Package Assembly
+## Task 9: PDF Generation + Package Assembly + Reference Text Extraction
 
 **Files:**
+- Create: `scripts/extract-reference.ts`
 - Create: `electron/services/pdfGenerator.ts`
 - Create: `electron/ipc/pdf.ts`
 - Modify: `electron/preload.ts`, `src/types/electron.d.ts`, `electron/main.ts`
 - Move: `CRSC_REFERENCE.pdf` and `crsc_va.txt` → `resources/`
 
-- [ ] **Step 1: Move reference files to resources/**
+- [ ] **Step 1: Install pdf-parse and move reference files**
 
+Run: `npm install --save-dev pdf-parse @types/pdf-parse`
 Copy `CRSC_REFERENCE.pdf` and `crsc_va.txt` from project root to `resources/`.
 
-- [ ] **Step 2: Download and inspect the DD Form 2860 template**
+- [ ] **Step 2: Create scripts/extract-reference.ts**
+
+Build-time script that reads `resources/CRSC_REFERENCE.pdf` using `pdf-parse` and writes the extracted text to `resources/crsc_reference_text.txt`. This file is loaded by `electron/services/claude.ts` as part of the system prompt.
+
+Add npm script: `"extract-reference": "tsx scripts/extract-reference.ts"`
+Run it: `npm run extract-reference`
+Verify: `resources/crsc_reference_text.txt` exists and contains readable text.
+
+- [ ] **Step 3: Download and inspect the DD Form 2860 template**
 
 Save to `resources/dd2860-template.pdf`. Write a small script to load with pdf-lib and log all AcroForm field names. Document the field name mapping.
 
-- [ ] **Step 3: Create electron/services/pdfGenerator.ts**
+- [ ] **Step 4: Create electron/services/pdfGenerator.ts**
 
 Port from `supabase/functions/generate-pdf/index.ts`:
 - `generateDD2860()`: load template, fill fields from SQLite, flatten, return bytes
@@ -418,24 +464,24 @@ Port from `supabase/functions/generate-pdf/index.ts`:
 - `generateSubmissionInstructions()`: static PDF with branch-specific addresses
 - `assemblePackage()`: create output folder, generate all PDFs, copy supporting docs, return folder path
 
-- [ ] **Step 4: Create electron/ipc/pdf.ts**
+- [ ] **Step 5: Create electron/ipc/pdf.ts**
 
 Handlers:
 - `pdf:generate`: call `assemblePackage()`, return path
 - `pdf:preview`: call `generateDD2860()`, return base64
 - `pdf:openFolder` (path): call `shell.openPath()`
 
-- [ ] **Step 5: Update preload, types, main**
+- [ ] **Step 6: Update preload, types, main**
 
-- [ ] **Step 6: Test — generate a preview from Download page**
+- [ ] **Step 7: Test — generate a preview from Download page**
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
-Message: `feat: add PDF generation and package assembly`
+Message: `feat: add PDF generation, package assembly, and reference text extraction`
 
 ---
 
-## Task 9: Fix Remaining Pages
+## Task 10: Fix Remaining Pages
 
 **Files:**
 - Modify: `src/pages/Landing.tsx`
@@ -478,25 +524,6 @@ Message: `feat: update all pages for local Electron app`
 
 ---
 
-## Task 10: Update TypeScript Types
-
-**Files:**
-- Modify: `src/types/database.ts`
-
-- [ ] **Step 1: Rewrite database.ts**
-
-Remove `users`, `payments`, `audit_log` types. Remove `user_id` from all table Row/Insert/Update types. Change `boolean` fields to `number` (SQLite 0/1).
-
-- [ ] **Step 2: Verify TypeScript compiles**
-
-Run: `npx tsc --noEmit`
-
-- [ ] **Step 3: Commit**
-
-Message: `feat: update TypeScript types for SQLite single-user schema`
-
----
-
 ## Task 11: Electron Builder Packaging
 
 **Files:**
@@ -504,7 +531,15 @@ Message: `feat: update TypeScript types for SQLite single-user schema`
 
 - [ ] **Step 1: Create electron-builder.yml**
 
-Configure: appId `com.crsc-assistant.app`, productName `CRSC Filing Assistant`, mac target dmg with universal arch, extraResources for `resources/` directory.
+Configure:
+- `appId`: `com.crsc-assistant.app`
+- `productName`: `CRSC Filing Assistant`
+- `mac.target`: `dmg` with `arch: ["universal"]`
+- `extraResources`: `[{ from: "resources/", to: "resources/", filter: ["**/*"] }]`
+- `directories.output`: `release`
+- `mac.category`: `public.app-category.productivity`
+
+The `extraResources` config ensures reference PDFs and text files are accessible at runtime via `process.resourcesPath`.
 
 - [ ] **Step 2: Build and package**
 
@@ -519,7 +554,7 @@ Message: `feat: add Electron Builder packaging config`
 
 ---
 
-## Task 12: Cleanup and Final Verification
+## Task 13: Cleanup and Final Verification
 
 - [ ] **Step 1: Delete the supabase/ directory**
 
