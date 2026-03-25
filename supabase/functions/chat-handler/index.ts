@@ -104,14 +104,13 @@ Always format this as a clickable markdown link so they can easily access it.
 
 ## Document Upload Requests
 When you need the veteran to upload a document for automatic data extraction, include ONE of these markers at the END of your response:
-- For VA Decision Letter: [UPLOAD_REQUEST:va_decision_letter]
-- For VA Code Sheet: [UPLOAD_REQUEST:va_code_sheet]
+- For VA Decision Letter or Code Sheet: [UPLOAD_REQUEST:va_decision_letter]
 - For DD214: [UPLOAD_REQUEST:dd214]
 
 This marker will be replaced with an upload dropzone in the chat interface. The veteran can drag-and-drop or click to upload their document, and the system will automatically extract the relevant information.
 
 Use this feature when:
-1. Collecting VA disability information - request the VA decision letter or code sheet
+1. Collecting VA disability information - request the VA decision letter or code sheet (use [UPLOAD_REQUEST:va_decision_letter] for both)
 2. Collecting military service information - request the DD214
 
 Example:
