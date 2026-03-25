@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthContext } from '@/contexts/AuthContext'
 import { useFormData } from '@/hooks/useFormData'
 import {
   MILITARY_BRANCHES,
@@ -54,9 +53,11 @@ import { generatePDF, sendChatMessage } from '@/lib/api'
 
 type EditSection = 'personal' | 'military' | 'va' | 'claim' | 'documents' | null
 
+// Local user ID (single-user desktop app)
+const LOCAL_USER_ID = 'local-user'
+
 export default function Review() {
   const navigate = useNavigate()
-  const { user } = useAuthContext()
   const {
     personalInfo,
     militaryService,
@@ -74,7 +75,7 @@ export default function Review() {
     removeDocument,
     calculateProgress,
     isSectionComplete,
-  } = useFormData(user?.id)
+  } = useFormData(LOCAL_USER_ID)
 
   const [editSection, setEditSection] = useState<EditSection>(null)
   const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
@@ -87,9 +88,9 @@ export default function Review() {
   const progress = calculateProgress()
 
   const handlePreviewDD2860 = async () => {
-    if (!user?.id) return
+    if (!LOCAL_USER_ID) return
     setIsGeneratingPreview(true)
-    const result = await generatePDF(user.id, 'dd2860')
+    const result = await generatePDF(LOCAL_USER_ID, 'dd2860')
     setIsGeneratingPreview(false)
     if (result.error) {
       toast.error(result.error)
@@ -101,7 +102,7 @@ export default function Review() {
   }
 
   const handleAiReview = async () => {
-    if (!user?.id) return
+    if (!LOCAL_USER_ID) return
     setIsRunningAiReview(true)
     setAiReviewResult(null)
 
@@ -120,7 +121,7 @@ Documents uploaded: ${documents.length} (${documents.map(d => d.document_type).j
 
 Please provide your review as a structured list with sections: Completeness Issues, Description Quality, Evidence Gaps, and Recommendations.`
 
-    const result = await sendChatMessage(user.id, reviewPrompt, [
+    const result = await sendChatMessage(LOCAL_USER_ID, reviewPrompt, [
       { role: 'user', content: reviewPrompt }
     ])
     setIsRunningAiReview(false)
@@ -720,10 +721,10 @@ Please provide your review as a structured list with sections: Completeness Issu
             Back to Chat
           </Button>
           <Button
-            onClick={() => navigate('/payment')}
+            onClick={() => navigate('/download')}
             disabled={!isReadyForPayment()}
           >
-            Proceed to Payment
+            Proceed to Download
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

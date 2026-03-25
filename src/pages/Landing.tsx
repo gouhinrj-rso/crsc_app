@@ -26,10 +26,10 @@ export default function Landing() {
             <span className="text-xl font-bold text-primary">CRSC Filing Assistant</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link to="/login">
+            <Link to="/dashboard">
               <Button variant="ghost">Sign In</Button>
             </Link>
-            <Link to="/register">
+            <Link to="/onboarding">
               <Button>Get Started</Button>
             </Link>
           </div>
@@ -50,7 +50,7 @@ export default function Landing() {
             helping you maximize your benefits with a complete, error-free application package.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/register">
+            <Link to="/onboarding">
               <Button size="lg" className="gap-2">
                 Start Your Application <ArrowRight className="h-4 w-4" />
               </Button>
@@ -147,7 +147,7 @@ export default function Landing() {
               ))}
             </div>
             <div className="text-center mt-8">
-              <Link to="/register">
+              <Link to="/onboarding">
                 <Button size="lg">Check Your Eligibility</Button>
               </Link>
             </div>
@@ -273,7 +273,7 @@ export default function Landing() {
                     </li>
                   ))}
                 </ul>
-                <Link to="/register" className="block mt-6">
+                <Link to="/onboarding" className="block mt-6">
                   <Button className="w-full" size="lg">
                     Get Started Now
                   </Button>
@@ -296,7 +296,7 @@ export default function Landing() {
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
             Join thousands of veterans who have successfully filed for CRSC using our service.
           </p>
-          <Link to="/register">
+          <Link to="/onboarding">
             <Button size="lg" variant="secondary" className="gap-2">
               Start Your Application <ArrowRight className="h-4 w-4" />
             </Button>
@@ -341,9 +341,9 @@ export default function Landing() {
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><Link to="/privacy" className="hover:text-white">Privacy Policy</Link></li>
-                <li><Link to="/terms" className="hover:text-white">Terms of Service</Link></li>
-                <li><Link to="/privacy" className="hover:text-white">HIPAA Notice</Link></li>
+                <li><Link to="#" className="hover:text-white">Privacy Policy</Link></li>
+                <li><Link to="#" className="hover:text-white">Terms of Service</Link></li>
+                <li><Link to="#" className="hover:text-white">HIPAA Notice</Link></li>
               </ul>
             </div>
             <div>

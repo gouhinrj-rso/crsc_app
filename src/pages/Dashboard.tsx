@@ -1,26 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthContext } from '@/contexts/AuthContext'
-import { useDevMode } from '@/contexts/DevModeContext'
 import { useFormData } from '@/hooks/useFormData'
 import { APPLICATION_STEPS } from '@/lib/constants'
-import { MfaSetup } from '@/components/MfaSetup'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Switch } from '@/components/ui/switch'
 import {
   Shield,
   User,
-  LogOut,
   CheckCircle,
   Circle,
   Clock,
@@ -32,8 +19,6 @@ import {
   Download,
   AlertCircle,
   Loader2,
-  AlertTriangle,
-  Code,
 } from 'lucide-react'
 
 const stepIcons: Record<string, typeof CheckCircle> = {
@@ -48,18 +33,14 @@ const stepIcons: Record<string, typeof CheckCircle> = {
   download: Download,
 }
 
+// Local user ID (single-user desktop app)
+const LOCAL_USER_ID = 'local-user'
+
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { user, signOut, isVeteranVerified, isAdmin } = useAuthContext()
-  const { devMode, toggleDevMode } = useDevMode()
-  const { packetStatus, loading, calculateProgress } = useFormData(user?.id)
+  const { packetStatus, loading, calculateProgress } = useFormData(LOCAL_USER_ID)
 
   const progress = calculateProgress()
-
-  const handleSignOut = async () => {
-    await signOut()
-    navigate('/')
-  }
 
   const getStepStatus = (stepId: string) => {
     const status = packetStatus.find((s) => s.step_name === stepId)
@@ -88,7 +69,7 @@ export default function Dashboard() {
       case 'review':
         return '/review'
       case 'payment':
-        return '/payment'
+        return '/download'
       case 'download':
         return '/download'
       default:
@@ -113,85 +94,14 @@ export default function Dashboard() {
             <Shield className="h-8 w-8 text-primary" />
             <span className="text-xl font-bold text-primary">CRSC Filing Assistant</span>
           </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2">
-                <User className="h-4 w-4" />
-                <span className="hidden sm:inline">{user?.email}</span>
-                {isVeteranVerified && (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{user?.email}</span>
-                  {isVeteranVerified && (
-                    <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
-                      Verified
-                    </Badge>
-                  )}
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {isAdmin && (
-                <>
-                  <div
-                    className="flex items-center justify-between px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      toggleDevMode()
-                    }}
-                  >
-                    <div className="flex items-center">
-                      <Code className="mr-2 h-4 w-4" />
-                      Dev Mode
-                    </div>
-                    <Switch
-                      checked={devMode}
-                      onCheckedChange={() => toggleDevMode()}
-                      onClick={(e) => e.stopPropagation()}
-                      className="ml-2"
-                    />
-                  </div>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button variant="ghost" className="gap-2" onClick={() => navigate('/settings')}>
+            <User className="h-4 w-4" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* Veteran Verification Banner */}
-        {!isVeteranVerified && (
-          <Alert className="mb-6 border-amber-200 bg-amber-50">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertTitle className="text-amber-800">Verify Your Veteran Status</AlertTitle>
-            <AlertDescription className="text-amber-700">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-2">
-                <span>
-                  Verify your veteran status with ID.me to generate your CRSC filing packet.
-                  You can still fill out your application, but verification is required before payment and download.
-                </span>
-                <Button
-                  size="sm"
-                  className="bg-amber-600 hover:bg-amber-700 whitespace-nowrap"
-                  onClick={() => navigate('/verify-veteran')}
-                >
-                  Verify Now
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
         {/* Welcome Card */}
         <Card className="mb-8">
           <CardHeader>
@@ -347,11 +257,6 @@ export default function Dashboard() {
               </Button>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Security Settings */}
-        <div className="mt-8">
-          <MfaSetup />
         </div>
 
         {/* Important Notice */}

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthContext } from '@/contexts/AuthContext'
 import { useChat, type Message } from '@/hooks/useChat'
 import { useFormData } from '@/hooks/useFormData'
 import { Button } from '@/components/ui/button'
@@ -182,9 +181,11 @@ function QuickResponses({ onSelect }: { onSelect: (response: string) => void }) 
   )
 }
 
+// Local user ID (single-user desktop app)
+const LOCAL_USER_ID = 'local-user'
+
 export default function Chat() {
   const navigate = useNavigate()
-  const { user, isVeteranVerified } = useAuthContext()
   const {
     messages,
     isLoading,
@@ -194,8 +195,8 @@ export default function Chat() {
     clearError,
     messagesEndRef,
     historyLoaded,
-  } = useChat(user?.id)
-  const { calculateProgress, packetStatus, resetProgress, loadAllData } = useFormData(user?.id)
+  } = useChat(LOCAL_USER_ID)
+  const { calculateProgress, packetStatus, resetProgress, loadAllData } = useFormData(LOCAL_USER_ID)
 
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -234,11 +235,11 @@ export default function Chat() {
   useEffect(() => {
     // Send initial greeting only after history has been loaded and if no messages exist
     // This ensures we don't send "Hello" when user already has conversation history
-    if (historyLoaded && messages.length === 0 && user?.id && !initialMessageSent.current) {
+    if (historyLoaded && messages.length === 0 && LOCAL_USER_ID && !initialMessageSent.current) {
       initialMessageSent.current = true
       sendMessage('Hello, I need help filing for CRSC benefits.')
     }
-  }, [historyLoaded, user?.id, messages.length, sendMessage])
+  }, [historyLoaded, messages.length, sendMessage])
 
   // Refresh form data (and progress) when a new assistant message is received
   // This ensures the progress bar updates after the AI saves data via tool calls
@@ -292,12 +293,6 @@ export default function Chat() {
           </div>
 
           <div className="flex items-center gap-4">
-            {isVeteranVerified && (
-              <Badge variant="outline" className="text-green-600 border-green-600 hidden sm:flex">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Verified
-              </Badge>
-            )}
             <div className="hidden md:flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Progress:</span>
               <Progress value={progress.percentage} className="w-24 h-2" />
@@ -446,7 +441,7 @@ export default function Chat() {
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  userId={user?.id}
+                  userId={LOCAL_USER_ID}
                   onExtractionComplete={handleExtractionComplete}
                   uploadCompleted={completedUploads}
                   showDropzone={showDropzoneForThisMessage}

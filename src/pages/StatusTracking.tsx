@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthContext } from '@/contexts/AuthContext'
 import { getPacketStatus, updatePacketStep } from '@/lib/api'
 import { BRANCH_MAILING_ADDRESSES } from '@/lib/constants'
 import { useFormData } from '@/hooks/useFormData'
@@ -45,10 +44,12 @@ interface StatusUpdate {
   notes: string
 }
 
+// Local user ID (single-user desktop app)
+const LOCAL_USER_ID = 'local-user'
+
 export default function StatusTracking() {
   const navigate = useNavigate()
-  const { user } = useAuthContext()
-  const { militaryService } = useFormData(user?.id)
+  const { militaryService } = useFormData(LOCAL_USER_ID)
   const [loading, setLoading] = useState(true)
   const [submissionDate, setSubmissionDate] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
@@ -58,9 +59,9 @@ export default function StatusTracking() {
   const [isSaving, setIsSaving] = useState(false)
 
   const loadStatus = useCallback(async () => {
-    if (!user?.id) return
+    if (!LOCAL_USER_ID) return
     setLoading(true)
-    const result = await getPacketStatus(user.id)
+    const result = await getPacketStatus(LOCAL_USER_ID)
     if (result.data) {
       const submissionStep = result.data.find((s) => s.step_name === 'submission_date')
       const trackingStep = result.data.find((s) => s.step_name === 'tracking_number')
@@ -86,11 +87,11 @@ export default function StatusTracking() {
   }, [loadStatus])
 
   const handleSaveSubmissionInfo = async () => {
-    if (!user?.id) return
+    if (!LOCAL_USER_ID) return
     setIsSaving(true)
     await Promise.all([
-      updatePacketStep(user.id, 'submission_date', submissionDate),
-      updatePacketStep(user.id, 'tracking_number', trackingNumber),
+      updatePacketStep(LOCAL_USER_ID, 'submission_date', submissionDate),
+      updatePacketStep(LOCAL_USER_ID, 'tracking_number', trackingNumber),
     ])
     setIsSaving(false)
     toast.success('Submission information saved')
@@ -108,7 +109,7 @@ export default function StatusTracking() {
     const updatedHistory = [...statusHistory, newUpdate]
     setStatusHistory(updatedHistory)
 
-    await updatePacketStep(user.id, 'post_submission_status', JSON.stringify({
+    await updatePacketStep(LOCAL_USER_ID, 'post_submission_status', JSON.stringify({
       current: currentStatus,
       history: updatedHistory,
     }))

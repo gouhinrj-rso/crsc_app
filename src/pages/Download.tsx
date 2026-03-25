@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthContext } from '@/contexts/AuthContext'
 import { useFormData } from '@/hooks/useFormData'
 import { generatePDF } from '@/lib/api'
 import {
@@ -36,10 +35,12 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+// Local user ID (single-user desktop app)
+const LOCAL_USER_ID = 'local-user'
+
 export default function DownloadPage() {
   const navigate = useNavigate()
-  const { user } = useAuthContext()
-  const { personalInfo, militaryService, loading } = useFormData(user?.id)
+  const { personalInfo, militaryService, loading } = useFormData(LOCAL_USER_ID)
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [checklist, setChecklist] = useState<Record<string, boolean>>({})
@@ -53,11 +54,11 @@ export default function DownloadPage() {
   const branchLabel = MILITARY_BRANCHES.find((b) => b.value === militaryService?.branch)?.label
 
   const handleGeneratePDF = async (documentType: 'dd2860' | 'cover-letter' | 'package') => {
-    if (!user?.id) return
+    if (!LOCAL_USER_ID) return
 
     setIsGenerating(true)
     try {
-      const result = await generatePDF(user.id, documentType)
+      const result = await generatePDF(LOCAL_USER_ID, documentType)
       if (result.data?.pdf) {
         // Convert base64 to blob and download
         const byteCharacters = atob(result.data.pdf)
