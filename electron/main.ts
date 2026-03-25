@@ -1,5 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import path from 'path'
+import { initDb, closeDb } from './db/database'
+import { runMigrations } from './db/migrations'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -20,6 +22,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  initDb()
+  runMigrations()
   createWindow()
 
   app.on('activate', () => {
@@ -27,6 +31,10 @@ app.whenReady().then(() => {
       createWindow()
     }
   })
+})
+
+app.on('before-quit', () => {
+  closeDb()
 })
 
 app.on('window-all-closed', () => {
