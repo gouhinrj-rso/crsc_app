@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFormData } from '@/hooks/useFormData'
-import { generatePDF } from '@/lib/api'
 import {
   MILITARY_BRANCHES,
   BRANCH_MAILING_ADDRESSES,
@@ -35,12 +34,9 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// Local user ID (single-user desktop app)
-const LOCAL_USER_ID = 'local-user'
-
 export default function DownloadPage() {
   const navigate = useNavigate()
-  const { personalInfo, militaryService, loading } = useFormData(LOCAL_USER_ID)
+  const { personalInfo, militaryService, loading } = useFormData()
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [checklist, setChecklist] = useState<Record<string, boolean>>({})
@@ -53,45 +49,48 @@ export default function DownloadPage() {
   const mailingInfo = getBranchMailingInfo()
   const branchLabel = MILITARY_BRANCHES.find((b) => b.value === militaryService?.branch)?.label
 
-  const handleGeneratePDF = async (documentType: 'dd2860' | 'cover-letter' | 'package') => {
-    if (!LOCAL_USER_ID) return
-
+  const handlePreviewPDF = async () => {
     setIsGenerating(true)
     try {
-      const result = await generatePDF(LOCAL_USER_ID, documentType)
-      if (result.data?.pdf) {
-        // Convert base64 to blob and download
-        const byteCharacters = atob(result.data.pdf)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i)
-        }
-        const byteArray = new Uint8Array(byteNumbers)
-        const blob = new Blob([byteArray], { type: 'application/pdf' })
-
-        // Create download link
-        const url = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `CRSC_${documentType}_${personalInfo?.last_name || 'Application'}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(url)
-
-        toast.success('Document downloaded successfully')
-      } else {
-        toast.error(result.error || 'Failed to generate PDF')
+      const base64 = await window.electronAPI.pdf.preview()
+      // Convert base64 to blob and download
+      const byteCharacters = atob(base64)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
       }
-    } catch (error) {
-      toast.error('Failed to generate PDF')
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: 'application/pdf' })
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `CRSC_DD2860_${personalInfo?.last_name || 'Application'}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast.success('Document downloaded successfully')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate PDF')
     } finally {
       setIsGenerating(false)
     }
   }
 
   const handleDownloadPackage = async () => {
-    await handleGeneratePDF('package')
+    setIsGenerating(true)
+    try {
+      const folderPath = await window.electronAPI.pdf.generate()
+      await window.electronAPI.pdf.openFolder(folderPath)
+      toast.success('Package generated successfully')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate package')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const copyToClipboard = (text: string) => {
@@ -208,20 +207,11 @@ export default function DownloadPage() {
                   <Button
                     variant="outline"
                     className="w-full justify-start"
-                    onClick={() => handleGeneratePDF('dd2860')}
+                    onClick={handlePreviewPDF}
                     disabled={isGenerating}
                   >
                     <FileText className="mr-2 h-4 w-4" />
                     DD Form 2860
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => handleGeneratePDF('cover-letter')}
-                    disabled={isGenerating}
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Cover Letter
                   </Button>
                 </div>
               </CardContent>

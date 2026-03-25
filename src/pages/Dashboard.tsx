@@ -15,7 +15,6 @@ import {
   FileText,
   MessageSquare,
   Upload,
-  CreditCard,
   Download,
   AlertCircle,
   Loader2,
@@ -29,16 +28,12 @@ const stepIcons: Record<string, typeof CheckCircle> = {
   disability_claims: FileText,
   documents: Upload,
   review: FileText,
-  payment: CreditCard,
   download: Download,
 }
 
-// Local user ID (single-user desktop app)
-const LOCAL_USER_ID = 'local-user'
-
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { packetStatus, loading, calculateProgress } = useFormData(LOCAL_USER_ID)
+  const { packetStatus, loading, calculateProgress } = useFormData()
 
   const progress = calculateProgress()
 

@@ -21,9 +21,7 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react'
-import type { Database } from '@/types/database'
-
-type Document = Database['public']['Tables']['documents']['Row']
+import type { Document } from '@/types/database'
 
 interface DocumentUploadProps {
   documents: Document[]

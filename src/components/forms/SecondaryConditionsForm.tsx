@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { secondaryConditionSchema, type SecondaryConditionFormData } from '@/lib/validation'
-import { getSecondaryConditions, createSecondaryCondition, deleteSecondaryCondition } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,9 +17,7 @@ import {
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEffect, useCallback } from 'react'
-import type { Database } from '@/types/database'
-
-type SecondaryCondition = Database['public']['Tables']['secondary_conditions']['Row']
+import type { SecondaryCondition } from '@/types/database'
 
 interface SecondaryConditionsFormProps {
   claimId: string
@@ -46,9 +43,11 @@ export default function SecondaryConditionsForm({ claimId, claimTitle }: Seconda
 
   const loadConditions = useCallback(async () => {
     setLoading(true)
-    const result = await getSecondaryConditions(claimId)
-    if (result.data) {
-      setConditions(result.data)
+    try {
+      const data = await window.electronAPI.formData.getSecondaryConditions(claimId)
+      setConditions(data || [])
+    } catch (err) {
+      console.error('Failed to load secondary conditions:', err)
     }
     setLoading(false)
   }, [claimId])
@@ -59,37 +58,34 @@ export default function SecondaryConditionsForm({ claimId, claimTitle }: Seconda
 
   const handleAdd = async (data: SecondaryConditionFormData) => {
     setAdding(true)
-    const result = await createSecondaryCondition(claimId, {
-      disability_code: data.disabilityCode || null,
-      description: data.description,
-      percentage: data.percentage,
-      date_awarded: data.dateAwarded || null,
-    })
-    setAdding(false)
-
-    if (result.error) {
-      toast.error(result.error)
-      return
+    try {
+      const result = await window.electronAPI.formData.createSecondaryCondition({
+        primary_claim_id: claimId,
+        disability_code: data.disabilityCode || null,
+        description: data.description,
+        percentage: data.percentage,
+        date_awarded: data.dateAwarded || null,
+      })
+      setConditions((prev) => [...prev, result])
+      form.reset()
+      setShowAddForm(false)
+      toast.success('Secondary condition added')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add condition')
     }
-
-    setConditions((prev) => [...prev, result.data!])
-    form.reset()
-    setShowAddForm(false)
-    toast.success('Secondary condition added')
+    setAdding(false)
   }
 
   const handleDelete = async (conditionId: string) => {
     setDeletingId(conditionId)
-    const result = await deleteSecondaryCondition(conditionId)
-    setDeletingId(null)
-
-    if (result.error) {
-      toast.error(result.error)
-      return
+    try {
+      await window.electronAPI.formData.deleteSecondaryCondition(conditionId)
+      setConditions((prev) => prev.filter((c) => c.id !== conditionId))
+      toast.success('Secondary condition removed')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove condition')
     }
-
-    setConditions((prev) => prev.filter((c) => c.id !== conditionId))
-    toast.success('Secondary condition removed')
+    setDeletingId(null)
   }
 
   if (loading) {

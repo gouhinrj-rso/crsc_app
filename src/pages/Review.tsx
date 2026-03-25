@@ -49,12 +49,8 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { generatePDF, sendChatMessage } from '@/lib/api'
 
 type EditSection = 'personal' | 'military' | 'va' | 'claim' | 'documents' | null
-
-// Local user ID (single-user desktop app)
-const LOCAL_USER_ID = 'local-user'
 
 export default function Review() {
   const navigate = useNavigate()
@@ -71,11 +67,11 @@ export default function Review() {
     addDisabilityClaim,
     editDisabilityClaim,
     removeDisabilityClaim,
-    uploadAndAddDocument,
+    addDocument,
     removeDocument,
     calculateProgress,
     isSectionComplete,
-  } = useFormData(LOCAL_USER_ID)
+  } = useFormData()
 
   const [editSection, setEditSection] = useState<EditSection>(null)
   const [editingClaimId, setEditingClaimId] = useState<string | null>(null)
@@ -88,21 +84,18 @@ export default function Review() {
   const progress = calculateProgress()
 
   const handlePreviewDD2860 = async () => {
-    if (!LOCAL_USER_ID) return
     setIsGeneratingPreview(true)
-    const result = await generatePDF(LOCAL_USER_ID, 'dd2860')
-    setIsGeneratingPreview(false)
-    if (result.error) {
-      toast.error(result.error)
-      return
-    }
-    if (result.data?.pdf) {
-      setPreviewPdf(result.data.pdf)
+    try {
+      const base64 = await window.electronAPI.pdf.preview()
+      setPreviewPdf(base64)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate preview')
+    } finally {
+      setIsGeneratingPreview(false)
     }
   }
 
   const handleAiReview = async () => {
-    if (!LOCAL_USER_ID) return
     setIsRunningAiReview(true)
     setAiReviewResult(null)
 
@@ -121,16 +114,29 @@ Documents uploaded: ${documents.length} (${documents.map(d => d.document_type).j
 
 Please provide your review as a structured list with sections: Completeness Issues, Description Quality, Evidence Gaps, and Recommendations.`
 
-    const result = await sendChatMessage(LOCAL_USER_ID, reviewPrompt, [
-      { role: 'user', content: reviewPrompt }
-    ])
-    setIsRunningAiReview(false)
+    try {
+      // Collect the full streamed response
+      let fullResponse = ''
+      const removeListener = window.electronAPI.chat.onStreamChunk((text) => {
+        fullResponse += text
+      })
 
-    if (result.error) {
-      toast.error('AI review failed: ' + result.error)
-      return
+      const result = await window.electronAPI.chat.send(reviewPrompt, [
+        { role: 'user', content: reviewPrompt }
+      ])
+
+      removeListener()
+
+      if (!result.success) {
+        toast.error('AI review failed: ' + (result.error || 'Unknown error'))
+      } else {
+        setAiReviewResult(fullResponse || 'No review generated')
+      }
+    } catch (err) {
+      toast.error('AI review failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setIsRunningAiReview(false)
     }
-    setAiReviewResult(result.data?.reply || 'No review generated')
   }
 
   const getBranchLabel = (value: string) =>
@@ -251,8 +257,17 @@ Please provide your review as a structured list with sections: Completeness Issu
   }
 
   const handleDocumentUpload = async (file: File, documentType: string) => {
-    const result = await uploadAndAddDocument(file, documentType)
-    return result
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      )
+      const doc = await window.electronAPI.documents.upload(base64, file.name, file.type, documentType)
+      await addDocument(doc)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to upload' }
+    }
   }
 
   const handleDocumentDelete = async (docId: string) => {
@@ -800,8 +815,8 @@ Please provide your review as a structured list with sections: Completeness Issu
                     vaFileNumber: vaDisabilityInfo.va_file_number || '',
                     currentVaRating: vaDisabilityInfo.current_va_rating || 10,
                     vaDecisionDate: vaDisabilityInfo.va_decision_date || '',
-                    hasVaWaiver: vaDisabilityInfo.has_va_waiver || false,
-                    receivesCrdp: vaDisabilityInfo.receives_crdp || false,
+                    hasVaWaiver: !!vaDisabilityInfo.has_va_waiver,
+                    receivesCrdp: !!vaDisabilityInfo.receives_crdp,
                   }
                 : undefined
             }
@@ -841,8 +856,8 @@ Please provide your review as a structured list with sections: Completeness Issu
                     unitOfAssignment: editingClaim.unit_of_assignment || '',
                     locationOfInjury: editingClaim.location_of_injury || '',
                     descriptionOfEvent: editingClaim.description_of_event || '',
-                    receivedPurpleHeart: editingClaim.received_purple_heart || false,
-                    hasSecondaryConditions: editingClaim.has_secondary_conditions || false,
+                    receivedPurpleHeart: !!editingClaim.received_purple_heart,
+                    hasSecondaryConditions: !!editingClaim.has_secondary_conditions,
                   }
                 : undefined
             }

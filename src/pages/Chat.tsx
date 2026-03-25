@@ -6,7 +6,6 @@ import { useFormData } from '@/hooks/useFormData'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
 import {
   Sheet,
   SheetContent,
@@ -70,13 +69,12 @@ function parseMessageContent(content: string): {
 
 interface MessageBubbleProps {
   message: Message
-  userId?: string
   onExtractionComplete?: (data: ExtractedDocumentData, documentType: DocumentType) => void
   uploadCompleted?: Set<string>
   showDropzone?: boolean // Only true for the most recent message with upload request
 }
 
-function MessageBubble({ message, userId, onExtractionComplete, uploadCompleted, showDropzone = false }: MessageBubbleProps) {
+function MessageBubble({ message, onExtractionComplete, uploadCompleted, showDropzone = false }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
 
@@ -133,13 +131,12 @@ function MessageBubble({ message, userId, onExtractionComplete, uploadCompleted,
         </div>
 
         {/* Render dropzones only for the most recent message with upload request and not completed */}
-        {showDropzone && !isUser && uploadRequests.length > 0 && !hasCompletedUploads && userId && onExtractionComplete && (
+        {showDropzone && !isUser && uploadRequests.length > 0 && !hasCompletedUploads && onExtractionComplete && (
           <div className="mt-2">
             {uploadRequests.map((docType) => (
               <ChatDropzone
                 key={`${message.id}-${docType}`}
                 documentType={docType}
-                userId={userId}
                 onExtractionComplete={(data, type) => {
                   onExtractionComplete(data, type)
                 }}
@@ -181,9 +178,6 @@ function QuickResponses({ onSelect }: { onSelect: (response: string) => void }) 
   )
 }
 
-// Local user ID (single-user desktop app)
-const LOCAL_USER_ID = 'local-user'
-
 export default function Chat() {
   const navigate = useNavigate()
   const {
@@ -196,7 +190,7 @@ export default function Chat() {
     messagesEndRef,
     historyLoaded,
   } = useChat()
-  const { calculateProgress, packetStatus, resetProgress, loadAllData } = useFormData(LOCAL_USER_ID)
+  const { calculateProgress, packetStatus, resetProgress, loadAllData } = useFormData()
 
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -235,7 +229,7 @@ export default function Chat() {
   useEffect(() => {
     // Send initial greeting only after history has been loaded and if no messages exist
     // This ensures we don't send "Hello" when user already has conversation history
-    if (historyLoaded && messages.length === 0 && LOCAL_USER_ID && !initialMessageSent.current) {
+    if (historyLoaded && messages.length === 0 && !initialMessageSent.current) {
       initialMessageSent.current = true
       sendMessage('Hello, I need help filing for CRSC benefits.')
     }
@@ -441,7 +435,6 @@ export default function Chat() {
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  userId={LOCAL_USER_ID}
                   onExtractionComplete={handleExtractionComplete}
                   uploadCompleted={completedUploads}
                   showDropzone={showDropzoneForThisMessage}

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -13,9 +13,25 @@ import {
   Users,
   Award,
   ArrowRight,
+  Settings,
 } from 'lucide-react'
 
 export default function Landing() {
+  const navigate = useNavigate()
+
+  const handleGetStarted = async () => {
+    try {
+      const apiKey = await window.electronAPI.settings.get('api_key')
+      if (!apiKey) {
+        navigate('/settings')
+      } else {
+        navigate('/onboarding')
+      }
+    } catch {
+      navigate('/settings')
+    }
+  }
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -26,12 +42,10 @@ export default function Landing() {
             <span className="text-xl font-bold text-primary">CRSC Filing Assistant</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link to="/dashboard">
-              <Button variant="ghost">Sign In</Button>
-            </Link>
-            <Link to="/onboarding">
-              <Button>Get Started</Button>
-            </Link>
+            <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+              <Settings className="h-5 w-5" />
+            </Button>
+            <Button onClick={handleGetStarted}>Get Started</Button>
           </div>
         </div>
       </header>
@@ -50,11 +64,9 @@ export default function Landing() {
             helping you maximize your benefits with a complete, error-free application package.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/onboarding">
-              <Button size="lg" className="gap-2">
-                Start Your Application <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Button size="lg" className="gap-2" onClick={handleGetStarted}>
+              Start Your Application <ArrowRight className="h-4 w-4" />
+            </Button>
             <Link to="#how-it-works">
               <Button size="lg" variant="outline">
                 Learn More
@@ -147,9 +159,7 @@ export default function Landing() {
               ))}
             </div>
             <div className="text-center mt-8">
-              <Link to="/onboarding">
-                <Button size="lg">Check Your Eligibility</Button>
-              </Link>
+              <Button size="lg" onClick={handleGetStarted}>Check Your Eligibility</Button>
             </div>
           </div>
         </div>
@@ -245,48 +255,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section className="py-20 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="max-w-lg mx-auto">
-            <Card className="border-primary">
-              <CardHeader className="text-center">
-                <Badge className="w-fit mx-auto mb-2">One-Time Fee</Badge>
-                <CardTitle className="text-4xl font-bold">$99</CardTitle>
-                <CardDescription>Complete CRSC Filing Package</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3">
-                  {[
-                    'AI-guided application process',
-                    'Completed DD Form 2860',
-                    'Professional cover letter',
-                    'Document checklist and organization',
-                    'Branch-specific mailing instructions',
-                    'Save and resume anytime',
-                    'Secure document storage',
-                    'Email support',
-                  ].map((feature, index) => (
-                    <li key={index} className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link to="/onboarding" className="block mt-6">
-                  <Button className="w-full" size="lg">
-                    Get Started Now
-                  </Button>
-                </Link>
-                <p className="text-center text-sm text-muted-foreground mt-4">
-                  30-day money-back guarantee if not satisfied
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="py-20 bg-primary text-white">
         <div className="container mx-auto px-4 text-center">
@@ -296,11 +264,9 @@ export default function Landing() {
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
             Join thousands of veterans who have successfully filed for CRSC using our service.
           </p>
-          <Link to="/onboarding">
-            <Button size="lg" variant="secondary" className="gap-2">
-              Start Your Application <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button size="lg" variant="secondary" className="gap-2" onClick={handleGetStarted}>
+            Start Your Application <ArrowRight className="h-4 w-4" />
+          </Button>
         </div>
       </section>
 

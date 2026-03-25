@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { validateFileUpload } from '@/lib/validation'
-import { extractDocumentData, type ExtractedDocumentData } from '@/lib/api'
+import type { ExtractedDocumentData } from '@/types/documents'
 import { Upload, Loader2, FileText, AlertCircle, CheckCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -15,12 +15,10 @@ const MAX_FILES = 10
 
 export type DocumentType = 'va_decision_letter' | 'dd214' | 'medical_records'
 
-// Re-export for convenience
-export type { ExtractedDocumentData } from '@/lib/api'
+export type { ExtractedDocumentData } from '@/types/documents'
 
 interface ChatDropzoneProps {
   documentType: DocumentType
-  userId: string
   onExtractionComplete: (data: ExtractedDocumentData, documentType: DocumentType) => void
   onError: (error: string) => void
   disabled?: boolean
@@ -37,7 +35,6 @@ type DropzoneState = 'ready' | 'processing' | 'done'
 
 export default function ChatDropzone({
   documentType,
-  userId,
   onExtractionComplete,
   onError,
   disabled = false,
@@ -84,19 +81,38 @@ export default function ChatDropzone({
         ))
 
         try {
-          const result = await extractDocumentData(userId, documentType, fileStatus.file)
+          // Convert file to base64
+          const arrayBuffer = await fileStatus.file.arrayBuffer()
+          const base64 = btoa(
+            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+          )
 
-          if (!result.success || !result.data) {
+          // Upload the file
+          await window.electronAPI.documents.upload(base64, fileStatus.file.name, fileStatus.file.type, documentType)
+
+          // Extract data using IPC
+          const extractedText = await window.electronAPI.documents.extract(base64, fileStatus.file.type)
+
+          if (!extractedText) {
             setFiles(prev => prev.map((f, idx) =>
-              idx === i ? { ...f, status: 'error', error: result.error || 'Extraction failed' } : f
+              idx === i ? { ...f, status: 'error', error: 'Extraction returned no data' } : f
             ))
             continue
           }
 
+          // Parse extracted text as JSON
+          let extractedData: ExtractedDocumentData
+          try {
+            extractedData = JSON.parse(extractedText)
+          } catch {
+            // If it's not JSON, wrap it as a simple object
+            extractedData = { disabilities: [], combinedRating: undefined, decisionDate: undefined, vaFileNumber: undefined } as ExtractedDocumentData
+          }
+
           setFiles(prev => prev.map((f, idx) =>
-            idx === i ? { ...f, status: 'success', data: result.data } : f
+            idx === i ? { ...f, status: 'success', data: extractedData } : f
           ))
-          allExtractedData.push(result.data)
+          allExtractedData.push(extractedData)
         } catch (err) {
           const error = err instanceof Error ? err.message : 'Failed to process document'
           setFiles(prev => prev.map((f, idx) =>
@@ -116,7 +132,7 @@ export default function ChatDropzone({
         onError('No data could be extracted from the uploaded documents')
       }
     },
-    [userId, documentType, onExtractionComplete, onError]
+    [documentType, onExtractionComplete, onError]
   )
 
   const handleFiles = useCallback(

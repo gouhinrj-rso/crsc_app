@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getPacketStatus, updatePacketStep } from '@/lib/api'
 import { BRANCH_MAILING_ADDRESSES } from '@/lib/constants'
 import { useFormData } from '@/hooks/useFormData'
 import { Button } from '@/components/ui/button'
@@ -44,12 +43,9 @@ interface StatusUpdate {
   notes: string
 }
 
-// Local user ID (single-user desktop app)
-const LOCAL_USER_ID = 'local-user'
-
 export default function StatusTracking() {
   const navigate = useNavigate()
-  const { militaryService } = useFormData(LOCAL_USER_ID)
+  const { militaryService, packetStatus, setStepStatus, loading: formLoading } = useFormData()
   const [loading, setLoading] = useState(true)
   const [submissionDate, setSubmissionDate] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
@@ -58,47 +54,43 @@ export default function StatusTracking() {
   const [statusHistory, setStatusHistory] = useState<StatusUpdate[]>([])
   const [isSaving, setIsSaving] = useState(false)
 
-  const loadStatus = useCallback(async () => {
-    if (!LOCAL_USER_ID) return
-    setLoading(true)
-    const result = await getPacketStatus(LOCAL_USER_ID)
-    if (result.data) {
-      const submissionStep = result.data.find((s) => s.step_name === 'submission_date')
-      const trackingStep = result.data.find((s) => s.step_name === 'tracking_number')
-      const statusStep = result.data.find((s) => s.step_name === 'post_submission_status')
+  const loadStatus = useCallback(() => {
+    const submissionStep = packetStatus.find((s) => s.step_name === 'submission_date')
+    const trackingStep = packetStatus.find((s) => s.step_name === 'tracking_number')
+    const statusStep = packetStatus.find((s) => s.step_name === 'post_submission_status')
 
-      if (submissionStep?.step_status) setSubmissionDate(submissionStep.step_status)
-      if (trackingStep?.step_status) setTrackingNumber(trackingStep.step_status)
-      if (statusStep?.step_status) {
-        try {
-          const parsed = JSON.parse(statusStep.step_status)
-          if (parsed.current) setCurrentStatus(parsed.current)
-          if (parsed.history) setStatusHistory(parsed.history)
-        } catch {
-          setCurrentStatus(statusStep.step_status)
-        }
+    if (submissionStep?.step_status) setSubmissionDate(submissionStep.step_status)
+    if (trackingStep?.step_status) setTrackingNumber(trackingStep.step_status)
+    if (statusStep?.step_status) {
+      try {
+        const parsed = JSON.parse(statusStep.step_status)
+        if (parsed.current) setCurrentStatus(parsed.current)
+        if (parsed.history) setStatusHistory(parsed.history)
+      } catch {
+        setCurrentStatus(statusStep.step_status)
       }
     }
     setLoading(false)
-  }, [user?.id])
+  }, [packetStatus])
 
   useEffect(() => {
-    loadStatus()
-  }, [loadStatus])
+    if (!formLoading) {
+      loadStatus()
+    }
+  }, [formLoading, loadStatus])
 
   const handleSaveSubmissionInfo = async () => {
-    if (!LOCAL_USER_ID) return
     setIsSaving(true)
     await Promise.all([
-      updatePacketStep(LOCAL_USER_ID, 'submission_date', submissionDate),
-      updatePacketStep(LOCAL_USER_ID, 'tracking_number', trackingNumber),
+      setStepStatus('submission_date', submissionDate),
+      setStepStatus('tracking_number', trackingNumber),
     ])
     setIsSaving(false)
     toast.success('Submission information saved')
   }
 
   const handleAddStatusUpdate = async () => {
-    if (!user?.id || !statusNotes.trim()) return
+    if (!statusNotes.trim()) return
     setIsSaving(true)
 
     const newUpdate: StatusUpdate = {
@@ -109,7 +101,7 @@ export default function StatusTracking() {
     const updatedHistory = [...statusHistory, newUpdate]
     setStatusHistory(updatedHistory)
 
-    await updatePacketStep(LOCAL_USER_ID, 'post_submission_status', JSON.stringify({
+    await setStepStatus('post_submission_status', JSON.stringify({
       current: currentStatus,
       history: updatedHistory,
     }))
