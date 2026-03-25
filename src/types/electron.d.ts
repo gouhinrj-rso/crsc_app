@@ -46,6 +46,17 @@ interface ElectronAPI {
     >
     clear: () => Promise<void>
   }
+  documents: {
+    upload: (
+      fileBase64: string,
+      fileName: string,
+      mimeType: string,
+      documentType: string
+    ) => Promise<Document>
+    list: () => Promise<Document[]>
+    delete: (docId: string) => Promise<void>
+    extract: (fileBase64: string, mimeType: string) => Promise<string>
+  }
 }
 
 declare global {

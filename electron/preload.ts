@@ -38,4 +38,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     history: () => ipcRenderer.invoke('chat:history'),
     clear: () => ipcRenderer.invoke('chat:clear'),
   },
+  documents: {
+    upload: (fileBase64: string, fileName: string, mimeType: string, documentType: string) =>
+      ipcRenderer.invoke('documents:upload', fileBase64, fileName, mimeType, documentType),
+    list: () => ipcRenderer.invoke('documents:list'),
+    delete: (docId: string) => ipcRenderer.invoke('documents:delete', docId),
+    extract: (fileBase64: string, mimeType: string) =>
+      ipcRenderer.invoke('documents:extract', fileBase64, mimeType),
+  },
 })

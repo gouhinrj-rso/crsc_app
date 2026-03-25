@@ -5,6 +5,7 @@ import { runMigrations } from './db/migrations'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerFormDataHandlers } from './ipc/formData'
 import { registerChatHandlers } from './ipc/chat'
+import { registerDocumentHandlers } from './ipc/documents'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -30,6 +31,7 @@ app.whenReady().then(() => {
   registerSettingsHandlers()
   registerFormDataHandlers()
   registerChatHandlers()
+  registerDocumentHandlers()
   createWindow()
 
   app.on('activate', () => {
