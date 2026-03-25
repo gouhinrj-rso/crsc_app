@@ -57,6 +57,7 @@ crsc_app/
 │   ├── hooks/                 # Rewritten to use IPC
 │   ├── lib/
 │   │   ├── ipc.ts             # Renderer-side IPC client
+│   │   ├── utils.ts            # Keep as-is (cn() utility, etc.)
 │   │   ├── validation.ts      # Keep as-is
 │   │   └── constants.ts       # Keep as-is
 │   └── App.tsx                # Simplified routing
@@ -110,7 +111,9 @@ React Component
 2. Main process starts Claude API stream
 3. Main process sends chunks via `webContents.send('chat:stream-chunk', chunk)`
 4. Renderer listens with `window.electronAPI.on('chat:stream-chunk', callback)`
-5. When complete, the original `invoke` promise resolves with the full response
+5. When complete, the original `invoke` promise resolves with the full response (or an error field if streaming failed mid-stream)
+
+**Cleanup:** The renderer must remove the `chat:stream-chunk` listener after each chat call completes to avoid memory leaks. Use a scoped listener that is removed in the `invoke` promise's `.finally()` handler.
 
 ---
 
@@ -206,7 +209,9 @@ Stores: `api_key`, `storage_path`, `model` (Claude model preference).
 ### Chat Service
 
 - Reads API key from `settings` table
-- Loads system prompt with bundled CRSC reference content (`crsc_va.txt` + `CRSC_REFERENCE.pdf`)
+- Loads system prompt with bundled CRSC reference content:
+  - `crsc_va.txt` — loaded directly as text
+  - `CRSC_REFERENCE.pdf` — pre-extracted to text at build time using `pdf-parse` and cached as `resources/crsc_reference_text.txt`. This avoids runtime PDF parsing on every chat session.
 - Calls Anthropic SDK directly with streaming
 - Model: `claude-sonnet-4-20250514` (configurable in settings)
 
@@ -233,6 +238,8 @@ Stores: `api_key`, `storage_path`, `model` (Claude model preference).
 2. Use `pdf-lib` to fill AcroForm fields by field name
 3. Flatten form (makes it non-editable)
 4. Save to local storage
+
+**Important:** The official DD 2860 PDF must be AcroForm-based (not XFA) for pdf-lib to fill it. The first implementation task must be to download the official template, inspect it with `pdf-lib`'s `getForm().getFields()`, and document all field names. If the form is XFA-based, a fallback is to generate the form from scratch using pdf-lib to match the official layout. The field name mapping will be documented in `electron/services/pdfGenerator.ts` as a constant.
 
 The existing `generate-pdf` edge function field-mapping logic converts directly — replace PostgreSQL data fetch with SQLite read.
 
@@ -273,6 +280,18 @@ CRSC_Package_[LastName]_[Date]/
 - **App name:** CRSC Filing Assistant
 - **App ID:** `com.crsc-assistant.app`
 
+### Native Module Rebuilding
+
+`better-sqlite3` is a native Node module that must be rebuilt for Electron's Node version and both architectures:
+
+- Use `@electron/rebuild` as a `postinstall` script: `"postinstall": "electron-rebuild"`
+- In `electron-builder.yml`, set `mac.target` to `dmg` with `arch: ["universal"]`
+- `electron-builder` handles rebuilding native modules for both Intel and Apple Silicon during the packaging step
+
+### Code Signing & Notarization
+
+The initial release will be **unsigned and unnotarized**. On first launch, macOS Gatekeeper will block the app — the user must right-click → "Open" to bypass. Code signing and Apple notarization are a follow-up task for wider distribution.
+
 ### Bundled Resources
 
 - React frontend (Vite build output)
@@ -309,8 +328,6 @@ CRSC_Package_[LastName]_[Date]/
 - `src/pages/VerifyVeteran.tsx`, `Payment.tsx`, `Privacy.tsx`, `Terms.tsx`
 - `src/contexts/AuthContext.tsx`, `DevModeContext.tsx`
 - `src/hooks/useAuth.ts`, `usePayment.ts`, `useSessionTimeout.ts`
-- `src/components/auth/` (entire directory)
-- `src/components/payment/` (entire directory)
 - `src/components/MfaSetup.tsx`, `SessionTimeoutWarning.tsx`
 - `src/lib/supabase.ts`, `src/lib/api.ts`
 - `supabase/` (entire directory — edge functions, config, migrations move to Electron)
@@ -325,7 +342,9 @@ CRSC_Package_[LastName]_[Date]/
 - `electron`, `electron-builder`
 - `better-sqlite3`, `@types/better-sqlite3`
 - `@anthropic-ai/sdk` (moved from edge function to main dependency)
-- `electron-vite` or similar dev tooling
+- `electron-vite` (dev tooling — Vite-native Electron integration with HMR)
+- `@electron/rebuild` (native module rebuilding)
+- `pdf-parse` (build-time PDF text extraction for reference docs)
 
 ---
 
@@ -336,7 +355,7 @@ CRSC_Package_[LastName]_[Date]/
 | Electron shell setup | Medium | New `electron/` directory, main.ts, preload.ts |
 | IPC handlers (5 modules) | Medium | Mostly port edge function logic, swap DB calls |
 | SQLite schema + migration | Low | Direct conversion from PostgreSQL, drop user_id |
-| Hooks rewrite (3 hooks) | Low | Replace fetch() with IPC calls |
+| Hooks rewrite (3 hooks) | Low | Replace fetch() with IPC calls, update `hooks/index.ts` barrel |
 | Remove auth/payment code | Low | Delete files, simplify App.tsx routing |
 | Settings page | Low | New simple page for API key + storage path |
 | PDF generation port | Medium | Move from Deno to Node.js, same pdf-lib logic |
